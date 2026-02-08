@@ -16,7 +16,11 @@ class Simulation(object):
 		self.atm.update(phi, ta, qa) 
 		self.photo.update(self.atm, self.hydro.psi_l, self.hydro.tl, dt)
 		self.hydro.update(self.atm, self.soil, self.photo, dt)
-		self.soil.update(dt, self.species.ZR, self.hydro.qs)
+		# Check if soil is SaltySoilGW and pass qgw if needed
+		if hasattr(self.soil, 'gw_cs'):  # SaltySoilGW has gw_cs attribute
+			self.soil.update(dt, self.species.ZR, self.hydro.qs, self.hydro.qgw)
+		else:
+			self.soil.update(dt, self.species.ZR, self.hydro.qs)
 	def output(self):
 		out = {}
 		out.update(self.photo.output())
