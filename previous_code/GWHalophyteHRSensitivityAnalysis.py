@@ -16,7 +16,7 @@ import matplotlib
 from dics import *
 from functions import *
 from defs import *
-from GWHalophyteHR import *
+from previous_code.GWHalophyteHR import *
 import openpyxl
 import time
 
