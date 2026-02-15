@@ -331,6 +331,7 @@ class HalophyteGW(Hydro):
 	def output(self):
 		return {'psi_l': self.psi_l_a, 'psi_w': self.psi_w_a, 'psi_w_osm': self.psi_w_osm_a, 'psi_w_turgor': self.psi_w_turgor_a, 'gp': self.gp_a, 'gsv': self.gsv_a, 'tl': self.tl_a, 'ev': self.ev_a, 'ev_cum': np.cumsum(list(i*1.8 for i in self.ev_a)), 'vw': self.vw_a, 'cw': self.cw_a, 'qgw': self.qgw_a, 'qs': self.qs_a, 'psi_b': self.psi_b_a, 'psi_x': self.psi_x_a, 'qw': self.qw_a, 'qbx': self.qbx_a, 'gs': self.gs_a, 'gwf': self.gwf_a, 'ggwr': self.ggwr_a, 'gsr': self.gsr_a, 'Energy balance': self.energy_balance, 'Water balance': self.water_balance, 'hr_cum': self.hr_cum_a, 'w':self.w_a, 'Uptake':self.uptake_a, 'MW':self.MW_a}
 
+
 	def psi_wf(self, vw, cw): 
 	    """Water potential of stored water (MPa)"""
 	    TL = 293.

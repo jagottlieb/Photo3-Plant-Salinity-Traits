@@ -226,7 +226,7 @@ class Hydro(object):
 
 class HalophyteGW(Hydro):
 	F_CAP = 0.5
-	E = 0.90 # filtration efficiency, unitless
+	E = 0.97 # filtration efficiency, unitless
 	Salt_Uptake = True
 	TS = 293. # soil water temp (K)
 	GWTS = 293 # groundwater temp (K)
