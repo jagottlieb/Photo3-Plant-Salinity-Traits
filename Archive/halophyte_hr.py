@@ -1,4 +1,4 @@
-# Halophyte hydraulic classes extracted from your GWHalophyteHR variant
+# Halophyte hydraulic classes extracted from GWHalophyteHR
 # Minimal standalone module to provide SoilGW, SaltySoilGW, Hydro, HalophyteGW
 from scipy.optimize import *
 from dics import *
