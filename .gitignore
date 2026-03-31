@@ -2,3 +2,12 @@
 
 modelC4int.pyc
 modelCAMint.pyc
+
+# Local VS Code workspace files
+*.code-workspace
+
+# Generated diagnostic output folders
+sample_output/Diagnostic_*_GWHalophyteSSensitivityAnalysis/
+
+# Jupyter temp artifacts
+.ipynb_checkpoints/
