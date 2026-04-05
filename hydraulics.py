@@ -253,33 +253,39 @@ class HydroCap(Hydro):
 # Halophyte class copied from GWHalophyteGW, renamed for multi-compartment support
 class Halophyte(Hydro):
 	F_CAP = 0.5
-	E = 0.90 # filtration efficiency, unitless
-	Salt_Uptake = True
+	E = 0.99 # filtration efficiency, unitless
 	TS = 293. # soil water temp (K)
 	GWTS = 293 # groundwater temp (K)
 	IV = 2. # van't hoff coefficient for NaCl
 	#psi_w_i = -1.8
-	TL = 293
+	TL = 293 #
 
-	def __init__(self, species, atm, soil, photo, vwi, cw, s_arr, root_frac_arr, B, cs_arr, wr, wft, pi0, eta, mcap, dt):
+	def __init__(self, species, atm, soil, photo, vwi, cw, s_arr, root_frac_arr, B, cs_arr, wr, wft, pi0, eta, mcap, dt, salt_uptake=False, psi_wf_mode='bartlett'):
 		Hydro.__init__(self, species)
 		self.GWMAX = species.GWMAX
 		self.VWT = species.VWT
 		self.vw = vwi * self.VWT
-		self.MW = cw * self.vw
 		self.CAP = species.CAP
-		self.cw = self.MW / self.vw
 		self.delta_cw = 0
 		self.delta_psi_w = 0
 		self.w = self.vw / self.VWT
-		self.psi_w_0 = self.cw * R * self.TS / (self.IV * self.TL * 10 ** (-6.))
 		self.hr_cum = 0
 		self.wr = wr
 		self.wft = wft
 		self.pi0 = pi0
+		# self.cw_ft = self.pi0/(R * self.TS *self.IV * 10 ** (-6.)) #self.MW / self.vw
+		# self.cw = self.cw_ft/self.w
+		# self.MW = self.cw * self.vw
+		self.cw = cw
+		self.MW = self.cw * self.vw
+		self.psi_w = self.cw * R * self.TS *self.IV * 10 ** (-6.)
 		self.eta = eta
 		self.mcap = mcap
 		self.dt = dt
+		self.Salt_Uptake = salt_uptake
+		# Reversible selector for plant storage water potential formulation.
+		# Supported: 'bartlett' (default), 'legacy'.
+		self.psi_wf_mode = psi_wf_mode
 
 		# Arrays for time series outputs
 		self.vw_a = []
@@ -313,6 +319,11 @@ class Halophyte(Hydro):
 		self.out = least_squares(
 			self.fBal,
 			(-1, 292.),
+			# args=(
+			# 	soil, photo, atm.phi, atm.ta, atm.qa, photo.cm,
+			# 	s_arr, self.lai, self.gp, 1., self.zr, self.psi_wf(self.vw, self.cw),
+			# 	root_frac_arr, B, cs_arr, dt
+			# ),
 			args=(
 				soil, photo, atm.phi, atm.ta, atm.qa, photo.cm,
 				s_arr, self.lai, self.gp, 1., self.zr, self.psi_wf(self.vw, self.cw),
@@ -326,7 +337,6 @@ class Halophyte(Hydro):
 		self.ev = self.evf(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, photo.cm, self.lai, 1.)
 
 	def update(self, atm, soil, photo, root_frac_arr, B, cs_arr, dt):
-		self.cw = self.MW / self.vw
 		self.out = least_squares(
 			self.fBal,
 			(-1, 292.),
@@ -355,8 +365,12 @@ class Halophyte(Hydro):
 		self.w = self.vw / self.VWT
 		self.flux_balance.append(np.sum(self.qs)+self.qwf(self.vw, self.ev, self.gp, self.psi_l, self.lai, self.cw, dt)-self.ev)
 		self.uptake_val = self.uptake(self.qsf(soil, soil.s, self.zr, soil.psi_s(soil.s,soil.cs), psi_b_val, B, root_frac_arr), cs_arr)
+		self.MW = self.MW + self.uptake_val * dt
+		self.cw = self.MW / self.vw
 		self.hr_cum = self.hr_cum + np.sum(self.hr(self.qs)) * 30 * 60 / 1000
+		#=========================================
 		# Store time series outputs
+		#=========================================
 		self.qs_a.append(self.qs)
 		gsr_vals = self.gsr(soil, soil.s, self.zr, B, root_frac_arr)
 		for i, gsr_val in enumerate(gsr_vals):
@@ -372,11 +386,7 @@ class Halophyte(Hydro):
 		self.vw_a.append(self.vw)
 		self.cw_a.append(self.cw)
 		#self.psi_w_a.append(self.psi_wf( self.vw, self.cw))
-		self.psi_w_a.append(
-			self.psi_wf_bartlett(
-				self.vw, VWT=self.VWT, pi_0=self.pi0, wft=self.wft, wr=self.wr, eta=self.eta, psi_0=0, mcap=self.mcap
-			)
-			)
+		self.psi_w_a.append(self.psi_wf(self.vw, self.cw))
 		self.psi_w_turgor_a.append(
 			self.psi_wf_turgor_bartlett(
 				self.vw, VWT=self.VWT, pi_0=self.pi0, wft=self.wft, wr=self.wr, eta=self.eta,
@@ -421,6 +431,31 @@ class Halophyte(Hydro):
 			'delta psi w': self.delta_psi_w_a,
 			'qbx': self.qbx_a,
 		}
+
+	def set_psi_wf_mode(self, mode):
+		"""Set storage water potential mode at runtime: 'bartlett' or 'legacy'."""
+		mode_norm = str(mode).strip().lower()
+		if mode_norm not in ('bartlett', 'legacy'):
+			raise ValueError("psi_wf_mode must be 'bartlett' or 'legacy'")
+		self.psi_wf_mode = mode_norm
+
+	def psi_wf(self, vw, cw=None):
+		"""Dispatch storage water potential formulation based on configured mode."""
+		mode = str(getattr(self, 'psi_wf_mode', 'bartlett')).strip().lower()
+		if mode == 'legacy':
+			# Legacy behavior based on osmotic + turgor components.
+			return self.psi_wf_osm(vw, cw=cw, VWT=self.VWT, TL=self.TS) + self.psi_wf_turgor(vw, cw=cw, VWT=self.VWT, TL=self.TS)
+		return self.psi_wf_bartlett(
+			vw,
+			VWT=self.VWT,
+			pi_0=self.pi0,
+			wft=self.wft,
+			wr=self.wr,
+			eta=self.eta,
+			psi_0=0,
+			mcap=self.mcap,
+		)
+
 	def psi_wf_bartlett(
 			self,
 			vw, #Volumetric water content in sapwood
@@ -463,9 +498,9 @@ class Halophyte(Hydro):
 			psi_wf = self.psi_wf_osm_bartlett(vw_safe, VWT, pi_0, wft, wr)
 		
 		return psi_wf
-	def psi_wf(self, vw, cw): 
-		TL = 293.
-		return self.psi_w_0 - (self.psi_w_0/self.w**(1/400)) - self.delta_cw*R*self.IV*TL*10.**(-6.) #+ 0.5*Plant_h*g*RHO_W*10**(-6)
+	# def psi_wf(self, vw, cw): 
+	# 	TL = 293.
+	# 	return self.psi_w_0 - (self.psi_w_0/self.w**(1/400)) - self.delta_cw*R*self.IV*TL*10.**(-6.) #+ 0.5*Plant_h*g*RHO_W*10**(-6)
 	
 	def psi_wf_osm_bartlett(self, vw, VWT, pi_0, wft, wr):
 		"""Helper: Calculate osmotic potential using Bartlett et al. 2012 framework."""
@@ -533,7 +568,7 @@ class Halophyte(Hydro):
 	def qbx(self, gp, psi_x, psi_b, lai):
 		return (gp*lai/self.F_CAP)*(psi_b - psi_x)
 	def gwf(self, psi_w):
-		return self.GWMAX*exp(-(-psi_w/2.)**2.)
+		return self.GWMAX #*exp(-(-psi_w/2.)**2.)
 		#return self.GWMAX*(self.vw/self.VWT)**4
 	def gsr(self, soil, s_arr, zr, B, root_frac_arr):
 		"""Soil-Root Conductance for multiple compartments (array output, B is constant)"""
@@ -549,10 +584,7 @@ class Halophyte(Hydro):
 			gsr_list.append(gsr_val)
 		return np.array(gsr_list)
 	def vwf(self, vw, ev, gp, psi_l, lai, cw, dt): 
-		#psi_w = self.psi_wf(vw, cw)
-		psi_w = self.psi_wf_bartlett(
-			vw, VWT=self.VWT, pi_0=self.pi0, wft=self.wft, wr=self.wr, eta=self.eta, psi_0=0, mcap=self.mcap
-		)
+		psi_w = self.psi_wf(vw, cw)
 		# Add safeguard for very small gp values
 		gp_safe = max(gp, 1e-10)
 		return min(vw - self.gwf(psi_w)*(psi_w - (ev*(1. - self.F_CAP))/(lai*gp_safe) - psi_l)*dt/10.**6, self.VWT)

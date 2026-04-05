@@ -123,14 +123,17 @@ class Pecan(object): #Pecan tree ()
     GA   =  185                 # atmospheric conductance (mm/s); calculated from Jones (1992) for windspeed 2 m/2 at 2 m, h = 4.572m
     RAIW =  14.3256             # 47ft Woodroof (1934), well-watered root area index (m2/m2)
     GPMAX = (1/0.01)/LAI        # maximum xylem conductance per unit leaf area (um/MPa/s)
-    GWMAX = .005                # max. conductance between stored water and transport pathway, per unit leaf (um/MPa/s); PWS assumed negligible
-    VWT =   0.27/LAI            # max. PWS (m3/m2 leaf area); PWS assumed negligible
+    GWMAX = 0.01 #.005          # max. conductance between stored water and transport pathway, per unit leaf (um/MPa/s); PWS assumed negligible
+    VWT =   0.27/LAI*0.1        # max. PWS (m3/m2 leaf area); PWS assumed negligible
     CAP =   0.15                # intrinsic plant hydraulic capacitance (MPa-1); PWS assumed negligible
-
-
     RD0 = 3.01                  # Standard Dark respiration at 25 C (umol/(m^2s))
     HAV =  62000.               # Activation Energy for Vc,max (J/mol)
     HDV =  202900.              # Deactivation Energy for Vc,max (J/mol)
+    VCMAX0 = 80. # maximum carboxylation capacity (umol/m2/sec) Shen et al. Preprint for Pecan Seedlings
+    JMAX0 = 175. # maximum electron transport capacity (umol/m2/sec) Shen et al. Preprint for Pecan Seedlings
+    # Values taken from Othman et al. 2014
+    PSILA0 = -2.1 # leaf water potential at point of full stomatal closure (MPa)
+    PSILA1 = -0.8 # leaf water potential at onset of stomatal closure (MPa)
 
 class Pgran(object):
     """Punica granatum (pomegranate)"""
