@@ -61,7 +61,7 @@ class Photo(object):
 		"""Electron transport rate (umol/(m^2s))"""
 		return min((phi*10.**6)/(EP*NA)*self.KAPPA_2*.5, self.jmax(tl)) 
 	def jpar(self, phi, tl):
-		"""Electron transport rate (umol/(m^2s), based off of PAR, not total solar radiatoion)"""
+		"""Electron transport rate (umol/(m^2s), based off of PAR, not total solar radiation)"""
 		return min(phi*self.KAPPA_2, self.jmax(tl)) 
 	def a_phiciTl(self, phi, ci, tl, ared):
 		"""Net photosynthetic demand for CO2 (umol/(m^2s^1))"""
@@ -135,16 +135,56 @@ class C3(Photo):
 		self.cm = self.cmNew(atm.cs, atm.ta, atm.qa)
 		self.cx = self.cm
 		self.a_a = []
-	def update(self, atm, psi_l, tl, dt):
+		self.psi_l_reduc_a = []
+		self.cs_reduc_a = []
+	def update(self, atm, psi_l, tl, dt, soil=None):
 		self.ci = self.ciNew(self.cs, atm.ta, atm.qa)
 		self.cm = self.cmNew(self.cs, atm.ta, atm.qa)
 		self.a = self.an(atm.phi, psi_l, tl, self.cm, self.ared)
 		self.a_a.append(self.a)
+		self.psi_l_reduc_a.append(1-self.a_psilc02(psi_l))
+		self.cs_reduc_a.append(self.a_cs_reduc())
 	def output(self):
-		return {'a': self.a_a}
+		return {'a': self.a_a, 'psi_l_reduc': self.psi_l_reduc_a, 'cs_reduc': self.cs_reduc_a}
+	def a_cs_reduc(self):
+		"""Salinity reduction factor (always 0 for base C3)"""
+		return 0
 	def an(self, phi, psi_l, tl, ci, ared): 
 		"""Photosynthetic rate, per unit leaf area (umol/(m^2s))"""
 		return self.a_psilc02(psi_l)*self.a_phiciTl(phi, ci, tl, ared)
+
+class C3_cs_reduc(C3):
+	"""C3 photosynthesis with soil salt concentration reduction function from Sanchez-Ledesma et al. (2022) data for Pecan Seedlings"""
+	
+	def __init__(self, species, atm, cs_array=None):
+		C3.__init__(self, species, atm)
+		self.reduction_factor = 0.0
+	
+	def a_cs_reduc(self):
+		"""Salinity reduction factor for photosynthesis (-)"""
+		return self.reduction_factor
+	
+	def update(self, atm, psi_l, tl, dt, soil=None):
+		"""Update photosynthesis with reduction factor applied"""
+		# Update reduction factor from current soil salt concentration before computing an()
+		if soil is not None and soil.cs is not None:
+			cs_max = np.max(soil.cs)
+			self.reduction_factor = 0.0288 * max(cs_max - 18.8, 0.0)
+		else:
+			self.reduction_factor = 0.0
+		self.ci = self.ciNew(self.cs, atm.ta, atm.qa)
+		self.cm = self.cmNew(self.cs, atm.ta, atm.qa)
+		self.a = self.an(atm.phi, psi_l, tl, self.cm, self.ared)
+		self.a_a.append(self.a)
+		self.psi_l_reduc_a.append(1-self.a_psilc02(psi_l))
+		self.cs_reduc_a.append(self.a_cs_reduc())
+	
+	def output(self):
+		return C3.output(self)
+	
+	def an(self, phi, psi_l, tl, ci, ared): 
+		"""Photosynthetic rate, per unit leaf area (umol/(m^2s))"""
+		return self.a_psilc02(psi_l) * self.a_phiciTl(phi, ci, tl, ared) * (1 - self.a_cs_reduc())
 
 class C4(Photo):
 	A1 = 0.5*15.

@@ -50,7 +50,7 @@ class SimulationMultiComp(object):
 		self.atm.update(phi, ta, qa)
 		
 		# Update photosynthesis
-		self.photo.update(self.atm, self.hydro.psi_l, self.hydro.tl, dt)
+		self.photo.update(self.atm, self.hydro.psi_l, self.hydro.tl, dt, soil=self.soil)
 		
 		# Get salt concentrations if available
 		cs_arr = self.soil.cs if hasattr(self.soil, 'cs') and self.soil.cs is not None else None

@@ -13,7 +13,7 @@ CP_A = 1012. # Specific Heat of Air (J/(kg K))
 R_A = 290. # Specific Gas Constant for Air (J/(kg K))
 NA = 6.022*10**23 # Avogadro's Constant (1/mol)
 R = 8.314; # Universal Gas Constant (J/(mol K))
-VW = 18.02/(RHO_W*1000.) # Molar volume of water (mol/m3)
+VW = 18.02/(RHO_W*1000.) # Molar volume of water (m^3/mol)
 
 # Atmospheric parameters
 P_ATM = 101.325*10**3 # Atmospheric pressure (Pa)

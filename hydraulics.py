@@ -568,8 +568,8 @@ class Halophyte(Hydro):
 	def qbx(self, gp, psi_x, psi_b, lai):
 		return (gp*lai/self.F_CAP)*(psi_b - psi_x)
 	def gwf(self, psi_w):
-		return self.GWMAX #*exp(-(-psi_w/2.)**2.)
-		#return self.GWMAX*(self.vw/self.VWT)**4
+		#return self.GWMAX*exp(-(-psi_w/2.)**2.)
+		return self.GWMAX*(self.vw/self.VWT)**4
 	def gsr(self, soil, s_arr, zr, B, root_frac_arr):
 		"""Soil-Root Conductance for multiple compartments (array output, B is constant)"""
 		rr = 0.2 * 10 ** -3
