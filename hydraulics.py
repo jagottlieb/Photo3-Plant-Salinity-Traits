@@ -250,8 +250,8 @@ class HydroCap(Hydro):
 		- (self.gsrfp(soil, s, gp, lai, zr)*(soil.psi_s(s) - psi_l) + lai*self.gwf(psi_w)*(psi_w - psi_l))/ \
 		(1. + (self.gsrfp(soil, s, gp, lai, zr)*(1. - self.F_CAP))/(lai*gp) + (self.gwf(psi_w)*(1. - self.F_CAP))/gp)
 
-# Halophyte class copied from GWHalophyteGW, renamed for multi-compartment support
-class Halophyte(Hydro):
+# Halophyte class with multi-soil compartment capability and stem water storage
+class HalophyteStemStorageMultiComp(Hydro):
 	F_CAP = 0.5
 	E = 0.99 # filtration efficiency, unitless
 	TS = 293. # soil water temp (K)
@@ -260,27 +260,24 @@ class Halophyte(Hydro):
 	#psi_w_i = -1.8
 	TL = 293 #
 
-	def __init__(self, species, atm, soil, photo, vwi, cw, s_arr, root_frac_arr, B, cs_arr, wr, wft, pi0, eta, mcap, dt, salt_uptake=False, psi_wf_mode='bartlett'):
+	def __init__(self, species, atm, soil, photo, vwi_stem, c_stem, s_arr, root_frac_arr, B, cs_arr, wr_stem, wft_stem, pi0_stem, eta_stem, mcap_stem, dt, salt_uptake=False, psi_wf_mode='bartlett'):
 		Hydro.__init__(self, species)
 		self.GWMAX = species.GWMAX
 		self.VWT = species.VWT
-		self.vw = vwi * self.VWT
+		self.vw = vwi_stem * self.VWT
 		self.CAP = species.CAP
-		self.delta_cw = 0
+		self.delta_c_stem = 0
 		self.delta_psi_w = 0
 		self.w = self.vw / self.VWT
 		self.hr_cum = 0
-		self.wr = wr
-		self.wft = wft
-		self.pi0 = pi0
-		# self.cw_ft = self.pi0/(R * self.TS *self.IV * 10 ** (-6.)) #self.MW / self.vw
-		# self.cw = self.cw_ft/self.w
-		# self.MW = self.cw * self.vw
-		self.cw = cw
-		self.MW = self.cw * self.vw
-		self.psi_w = self.cw * R * self.TS *self.IV * 10 ** (-6.)
-		self.eta = eta
-		self.mcap = mcap
+		self.wr_stem = wr_stem
+		self.wft_stem = wft_stem
+		self.pi0_stem = pi0_stem
+		self.c_stem = c_stem
+		self.MW = self.c_stem * self.vw
+		self.psi_w = self.c_stem * R * self.TS *self.IV * 10 ** (-6.)
+		self.eta_stem = eta_stem
+		self.mcap_stem = mcap_stem
 		self.dt = dt
 		self.Salt_Uptake = salt_uptake
 		# Reversible selector for plant storage water potential formulation.
@@ -289,16 +286,16 @@ class Halophyte(Hydro):
 
 		# Arrays for time series outputs
 		self.vw_a = []
-		self.cw_a = []
+		self.c_stem_a = []
 		self.psi_b_a = []
 		self.psi_x_a = []
-		self.qw_a = []
-		self.w_a = []
-		self.psi_w_a = []
+		self.qw_stem_a = []
+		self.w_stem_a = []
+		self.psi_w_stem_a = []
 		self.psi_w_osm_a = []
 		self.psi_w_turgor_a = []
 		self.gs_a = []
-		self.gwf_a = []
+		self.gw_stem_a = []
 		self.gsr_a = [[] for _ in s_arr]
 		self.qs_a = []
 		self.hr_cum_a = []
@@ -314,6 +311,10 @@ class Halophyte(Hydro):
 		self.gp_a = []
 		self.gsw_a = []
 		self.qbx_a = []
+		self.qw_a = self.qw_stem_a
+		self.w_a = self.w_stem_a
+		self.psi_w_a = self.psi_w_stem_a
+		self.gwf_a = self.gw_stem_a
 
 		# Initial solve for psi_l and tl
 		self.out = least_squares(
@@ -321,12 +322,12 @@ class Halophyte(Hydro):
 			(-1, 292.),
 			# args=(
 			# 	soil, photo, atm.phi, atm.ta, atm.qa, photo.cm,
-			# 	s_arr, self.lai, self.gp, 1., self.zr, self.psi_wf(self.vw, self.cw),
+			# 	s_arr, self.lai, self.gp, 1., self.zr, self.psi_wf(self.vw, self.c_stem),
 			# 	root_frac_arr, B, cs_arr, dt
 			# ),
 			args=(
 				soil, photo, atm.phi, atm.ta, atm.qa, photo.cm,
-				s_arr, self.lai, self.gp, 1., self.zr, self.psi_wf(self.vw, self.cw),
+				s_arr, self.lai, self.gp, 1., self.zr, self.psi_wf(self.vw, self.c_stem),
 				root_frac_arr, B, cs_arr, dt
 			),
 			bounds=([-10.0, 260.0], [0.0, 330.0]),
@@ -342,7 +343,7 @@ class Halophyte(Hydro):
 			(-1, 292.),
 			args=(
 				soil, photo, atm.phi, atm.ta, atm.qa, photo.cm,
-				soil.s, self.lai, self.gp, 1., self.zr, self.psi_wf(self.vw, self.cw),
+				soil.s, self.lai, self.gp, 1., self.zr, self.psi_wf(self.vw, self.c_stem),
 				root_frac_arr, B, cs_arr, dt
 			),
 			bounds=([-10.0, 260.0], [0.0, 330.0]),
@@ -352,21 +353,24 @@ class Halophyte(Hydro):
 		self.tl = self.out.x[1]
 		self.gp = self.gpf(self.psi_l)
 		self.ev = self.evf(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, photo.cm, self.lai, 1.)
-		psi_b_val = self.psi_b(soil, soil.s, self.zr, self.psi_l, soil.psi_s(soil.s,soil.cs), B, root_frac_arr, self.gp, self.lai, self.ev, self.vw, self.cw)
+		psi_b_val = self.psi_b(soil, soil.s, self.zr, self.psi_l, soil.psi_s(soil.s,soil.cs), B, root_frac_arr, self.gp, self.lai, self.ev, self.vw, self.c_stem)
 		self.qs = self.qsf(soil, soil.s, self.zr, soil.psi_s(soil.s,soil.cs), psi_b_val, B, root_frac_arr)
-		self.gw = self.gwf(self.psi_wf(self.vw, self.cw))
-		self.qw = self.qwf(self.vw, self.ev, self.gp, self.psi_l, self.lai, self.cw, dt)
+		self.gw_stem = self.gwf_stem(self.psi_wf_stem(self.vw, self.c_stem))
+		self.qw_stem = self.qwf_stem(self.vw, self.ev, self.gp, self.psi_l, self.lai, self.c_stem, dt)
+		# Backward-compatible scalar aliases.
+		self.gw = self.gw_stem
+		self.qw = self.qw_stem
 		self.qbxf = self.qbx(
 			self.gp,
 			self.psi_x(self.ev, self.psi_l, self.gp, self.lai),
-			self.psi_b(soil, soil.s, self.zr, self.psi_l, soil.psi_s(soil.s,soil.cs), B, root_frac_arr, self.gp, self.lai, self.ev, self.vw, self.cw),
+			self.psi_b(soil, soil.s, self.zr, self.psi_l, soil.psi_s(soil.s,soil.cs), B, root_frac_arr, self.gp, self.lai, self.ev, self.vw, self.c_stem),
 			self.lai)
-		self.vw = self.vwf(self.vw, self.ev, self.gp, self.psi_l, self.lai, self.cw, dt)
+		self.vw = self.vwf(self.vw, self.ev, self.gp, self.psi_l, self.lai, self.c_stem, dt)
 		self.w = self.vw / self.VWT
-		self.flux_balance.append(np.sum(self.qs)+self.qwf(self.vw, self.ev, self.gp, self.psi_l, self.lai, self.cw, dt)-self.ev)
+		self.flux_balance.append(np.sum(self.qs)+self.qwf(self.vw, self.ev, self.gp, self.psi_l, self.lai, self.c_stem, dt)-self.ev)
 		self.uptake_val = self.uptake(self.qsf(soil, soil.s, self.zr, soil.psi_s(soil.s,soil.cs), psi_b_val, B, root_frac_arr), cs_arr)
 		self.MW = self.MW + self.uptake_val * dt
-		self.cw = self.MW / self.vw
+		self.c_stem = self.MW / self.vw
 		self.hr_cum = self.hr_cum + np.sum(self.hr(self.qs)) * 30 * 60 / 1000
 		#=========================================
 		# Store time series outputs
@@ -378,31 +382,31 @@ class Halophyte(Hydro):
 		self.psi_l_a.append(self.psi_l)
 		self.tl_a.append(self.tl)
 		self.ev_a.append(self.ev)
-		self.qw_a.append(self.qw)
+		self.qw_stem_a.append(self.qw_stem)
 		self.qbx_a.append(self.qbxf)
 		self.gp_a.append(self.gp)
-		self.gwf_a.append(self.gw)
+		self.gw_stem_a.append(self.gw_stem)
 		self.gsw_a.append(self.gsw(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, photo.cx, photo.ared))
 		self.vw_a.append(self.vw)
-		self.cw_a.append(self.cw)
-		#self.psi_w_a.append(self.psi_wf( self.vw, self.cw))
-		self.psi_w_a.append(self.psi_wf(self.vw, self.cw))
+		self.c_stem_a.append(self.c_stem)
+		#self.psi_w_stem_a.append(self.psi_wf_stem(self.vw, self.c_stem))
+		self.psi_w_stem_a.append(self.psi_wf_stem(self.vw, self.c_stem))
 		self.psi_w_turgor_a.append(
 			self.psi_wf_turgor_bartlett(
-				self.vw, VWT=self.VWT, pi_0=self.pi0, wft=self.wft, wr=self.wr, eta=self.eta,
+				self.vw, VWT=self.VWT, pi_0=self.pi0_stem, wft=self.wft_stem, wr=self.wr_stem, eta=self.eta_stem,
 				)
 				)
 		self.psi_w_osm_a.append(
 			self.psi_wf_osm_bartlett(
-				self.vw, VWT=self.VWT, pi_0=self.pi0, wft=self.wft, wr=self.wr,
+				self.vw, VWT=self.VWT, pi_0=self.pi0_stem, wft=self.wft_stem, wr=self.wr_stem,
 				)
 				)
 		self.psi_x_a.append(self.psi_x(self.ev, self.psi_l, self.gp, self.lai))
-		self.psi_b_a.append(self.psi_b(soil, soil.s, self.zr, self.psi_l, soil.psi_s(soil.s,soil.cs), B, root_frac_arr, self.gp, self.lai, self.ev, self.vw, self.cw))
+		self.psi_b_a.append(self.psi_b(soil, soil.s, self.zr, self.psi_l, soil.psi_s(soil.s,soil.cs), B, root_frac_arr, self.gp, self.lai, self.ev, self.vw, self.c_stem))
 		self.hr_cum_a.append(self.hr_cum)
-		self.w_a.append(self.w)
+		self.w_stem_a.append(self.w)
 		self.MW_a.append(self.MW)
-		# self.flux_balance.append(np.sum(self.qs)+self.qwf(self.vw, self.ev, self.gp, self.psi_l, self.lai, self.cw, dt)-self.ev)
+		# self.flux_balance.append(np.sum(self.qs)+self.qwf(self.vw, self.ev, self.gp, self.psi_l, self.lai, self.c_stem, dt)-self.ev)
 
 	def output(self):
 		return {
@@ -414,22 +418,27 @@ class Halophyte(Hydro):
 			'tl': self.tl_a, 
 			'ev': self.ev_a, 
 			'ev_cum': np.cumsum(list(i*1.8 for i in self.ev_a)),
-			'qw': self.qw_a,
+			'qw_stem': self.qw_stem_a,
 			'vw': self.vw_a, 
-			'cw': self.cw_a, 
-			'psi_w': self.psi_w_a,
+			'c_stem': self.c_stem_a, 
+			'psi_w_stem': self.psi_w_stem_a,
 			'psi_w_turgor': self.psi_w_turgor_a,
 			'psi_w_osm': self.psi_w_osm_a,
 			'psi_x': self.psi_x_a,
 			'psi_b': self.psi_b_a,
-			'gwf': self.gwf_a,
-			'w': self.w_a,
+			'gw_stem': self.gw_stem_a,
+			'w_stem': self.w_stem_a,
 			'flux_balance': self.flux_balance,
 			'hr_cum': self.hr_cum_a, 
 			'Uptake': self.uptake_a, 
 			'MW': self.MW_a, 
 			'delta psi w': self.delta_psi_w_a,
 			'qbx': self.qbx_a,
+			# Backward-compatible aliases
+			'qw': self.qw_stem_a,
+			'w': self.w_stem_a,
+			'psi_w': self.psi_w_stem_a,
+			'gwf': self.gw_stem_a,
 		}
 
 	def set_psi_wf_mode(self, mode):
@@ -439,21 +448,25 @@ class Halophyte(Hydro):
 			raise ValueError("psi_wf_mode must be 'bartlett' or 'legacy'")
 		self.psi_wf_mode = mode_norm
 
-	def psi_wf(self, vw, cw=None):
+	def psi_wf_stem(self, vw, c_stem=None):
+		"""Stem-suffixed wrapper for storage water potential."""
+		return self.psi_wf(vw, c_stem=c_stem)
+
+	def psi_wf(self, vw, c_stem=None):
 		"""Dispatch storage water potential formulation based on configured mode."""
 		mode = str(getattr(self, 'psi_wf_mode', 'bartlett')).strip().lower()
 		if mode == 'legacy':
 			# Legacy behavior based on osmotic + turgor components.
-			return self.psi_wf_osm(vw, cw=cw, VWT=self.VWT, TL=self.TS) + self.psi_wf_turgor(vw, cw=cw, VWT=self.VWT, TL=self.TS)
+			return self.psi_wf_osm(vw, c_stem=c_stem, VWT=self.VWT, TL=self.TS) + self.psi_wf_turgor(vw, c_stem=c_stem, VWT=self.VWT, TL=self.TS)
 		return self.psi_wf_bartlett(
 			vw,
 			VWT=self.VWT,
-			pi_0=self.pi0,
-			wft=self.wft,
-			wr=self.wr,
-			eta=self.eta,
+			pi_0=self.pi0_stem,
+			wft=self.wft_stem,
+			wr=self.wr_stem,
+			eta=self.eta_stem,
 			psi_0=0,
-			mcap=self.mcap,
+			mcap=self.mcap_stem,
 		)
 
 	def psi_wf_bartlett(
@@ -498,9 +511,9 @@ class Halophyte(Hydro):
 			psi_wf = self.psi_wf_osm_bartlett(vw_safe, VWT, pi_0, wft, wr)
 		
 		return psi_wf
-	# def psi_wf(self, vw, cw): 
+	# def psi_wf(self, vw, c_stem): 
 	# 	TL = 293.
-	# 	return self.psi_w_0 - (self.psi_w_0/self.w**(1/400)) - self.delta_cw*R*self.IV*TL*10.**(-6.) #+ 0.5*Plant_h*g*RHO_W*10**(-6)
+	# 	return self.psi_w_0 - (self.psi_w_0/self.w**(1/400)) - self.delta_c_stem*R*self.IV*TL*10.**(-6.) #+ 0.5*Plant_h*g*RHO_W*10**(-6)
 	
 	def psi_wf_osm_bartlett(self, vw, VWT, pi_0, wft, wr):
 		"""Helper: Calculate osmotic potential using Bartlett et al. 2012 framework."""
@@ -515,14 +528,14 @@ class Halophyte(Hydro):
 		psi_turgor = abs(pi_0) - eta * (VWT * wft - vw) / (VWT * wft - vr)
 		return max(psi_turgor, 0)  # Turgor cannot be negative
 	
-	def psi_wf_turgor(self, vw, cw=None, VWT=None, eta=27.7, aF=0.75, TL=293.):
+	def psi_wf_turgor(self, vw, c_stem=None, VWT=None, eta=27.7, aF=0.75, TL=293.):
 		"""Calculate turgor pressure (MPa) based on salt concentration model."""
 		if VWT is None:
 			VWT = self.VWT
 		psi_wf_osm_ft = -(self.MW/VWT)*R*self.IV*TL*10.**(-6.)
 		return max(-psi_wf_osm_ft - eta*((1-(vw/VWT))/(1-aF)), 0)
 	
-	def psi_wf_osm(self, vw, cw=None, VWT=None, TL=293.):
+	def psi_wf_osm(self, vw, c_stem=None, VWT=None, TL=293.):
 		"""Calculate osmotic potential (MPa) based on salt concentration model."""
 		if VWT is None:
 			VWT = self.VWT
@@ -546,7 +559,7 @@ class Halophyte(Hydro):
 		# Add safeguard for very small gp values
 		gp_safe = max(gp, 1e-10)
 		return (ev*(1-self.F_CAP)/(lai*gp_safe) + psi_l)
-	def psi_b(self, soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai, ev, vw, cw):
+	def psi_b(self, soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai, ev, vw, c_stem):
 		"""Root/soil interface potential: algebraically enforces sum(qs_i) = qbx."""
 		psi_x_val = self.psi_x(ev, psi_l, gp, lai)
 		a_val = self.a(soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr)
@@ -557,8 +570,12 @@ class Halophyte(Hydro):
 		if abs(denom) < 1e-12:
 			denom = 1e-12 if denom >= 0 else -1e-12
 		return (a_val + gp_term * psi_x_val) / denom
-	def qwf(self, vw, ev, gp, psi_l, lai, cw, dt):
-		return (vw - self.vwf(vw, ev, gp, psi_l, lai, cw, dt))*lai*10.**6/dt
+	def qwf(self, vw, ev, gp, psi_l, lai, c_stem, dt):
+		return (vw - self.vwf(vw, ev, gp, psi_l, lai, c_stem, dt))*lai*10.**6/dt
+
+	def qwf_stem(self, vw, ev, gp, psi_l, lai, c_stem, dt):
+		"""Stem-suffixed wrapper for storage flux."""
+		return self.qwf(vw, ev, gp, psi_l, lai, c_stem, dt)
 	def qsf(self, soil, s_arr, zr, psi_s_arr, psi_b, B, root_frac_arr):
 		"""Soil water flux for multiple compartments (array output)"""
 		gsr_vals = self.gsr(soil, s_arr, zr, B, root_frac_arr)
@@ -570,6 +587,10 @@ class Halophyte(Hydro):
 	def gwf(self, psi_w):
 		#return self.GWMAX*exp(-(-psi_w/2.)**2.)
 		return self.GWMAX*(self.vw/self.VWT)**4
+
+	def gwf_stem(self, psi_w):
+		"""Stem-suffixed wrapper for storage conductance."""
+		return self.gwf(psi_w)
 	def gsr(self, soil, s_arr, zr, B, root_frac_arr):
 		"""Soil-Root Conductance for multiple compartments (array output, B is constant)"""
 		rr = 0.2 * 10 ** -3
@@ -583,8 +604,8 @@ class Halophyte(Hydro):
 			gsr_val = (kr * ks / (kr + ks)) * 101.9 * 10 ** 6 * Ar * zr
 			gsr_list.append(gsr_val)
 		return np.array(gsr_list)
-	def vwf(self, vw, ev, gp, psi_l, lai, cw, dt): 
-		psi_w = self.psi_wf(vw, cw)
+	def vwf(self, vw, ev, gp, psi_l, lai, c_stem, dt): 
+		psi_w = self.psi_wf(vw, c_stem)
 		# Add safeguard for very small gp values
 		gp_safe = max(gp, 1e-10)
 		return min(vw - self.gwf(psi_w)*(psi_w - (ev*(1. - self.F_CAP))/(lai*gp_safe) - psi_l)*dt/10.**6, self.VWT)
@@ -607,7 +628,7 @@ class Halophyte(Hydro):
 		psi_s_arr = soil.psi_s(soil.s, soil.cs)
 		# Calculate psi_b (root/soil interface potential)
 		psi_b_val = self.psi_b(
-			soil, soil.s, self.zr, psi_l, soil.psi_s(soil.s,soil.cs), B, root_frac_arr, gp, lai, evf_val, self.vw, self.cw
+			soil, soil.s, self.zr, psi_l, soil.psi_s(soil.s,soil.cs), B, root_frac_arr, gp, lai, evf_val, self.vw, self.c_stem
 		)
 		# Calculate qsf (soil water flux for each compartment)
 		qsf_arr = self.qsf(
@@ -618,7 +639,7 @@ class Halophyte(Hydro):
 		qbx_val = self.qbx(gp, psi_x_val, psi_b_val, lai)
 
 		# Calculate stored water flux (single value)
-		qwf_val = self.qwf(self.vw, evf_val, gp, psi_l, lai, self.cw, dt)
+		qwf_val = self.qwf(self.vw, evf_val, gp, psi_l, lai, self.c_stem, dt)
 		# Energy balance equation
 		energy_balance = (
 			phi * lai
@@ -631,4 +652,562 @@ class Halophyte(Hydro):
 			- qbx_val
 			- qwf_val
 		)
+		return (water_balance, energy_balance)
+
+
+class HalophyteStemLeafStorageMultiComp(Hydro):
+	"""Multi-compartment halophyte hydraulics with both stem and leaf storage."""
+
+	F_CAP = 0.5
+	E = 0.99
+	TS = 293.
+	IV = 2.
+
+	def __init__(
+		self,
+		species,
+		atm,
+		soil,
+		photo,
+		vwi_stem,
+		c_stem,
+		s_arr,
+		root_frac_arr,
+		B,
+		cs_arr,
+		wr_stem,
+		wft_stem,
+		pi0_stem,
+		eta_stem,
+		mcap_stem,
+		dt,
+		salt_uptake=False,
+		psi_wf_mode='bartlett',
+		vwi_leaf=1.0,
+		c_leaf=None,
+		wr_leaf=0.1,
+		wft_leaf=1.0,
+		pi0_leaf=-1.5,
+		eta_leaf=5,
+		mcap_leaf=12,
+	):
+		Hydro.__init__(self, species)
+
+		# Stem storage parameters
+		self.GWMAX_STEM = species.GWMAX
+		self.VWT_STEM = species.VWT
+		self.vw_stem = vwi_stem * self.VWT_STEM
+		self.w_stem = self.vw_stem / self.VWT_STEM
+		self.wr_stem = wr_stem
+		self.wft_stem = wft_stem
+		self.pi0_stem = pi0_stem
+		self.eta_stem = eta_stem
+		self.mcap_stem = mcap_stem
+		self.c_stem = c_stem
+
+		# Leaf storage parameters (support either GWLEAF or GWMAXLEAF naming)
+		self.GWLEAF = getattr(species, 'GWLEAF', getattr(species, 'GWMAXLEAF', 0.0))
+		self.VWTLEAF = getattr(species, 'VWTLEAF', 1e-6)
+		self.vw_leaf = vwi_leaf * self.VWTLEAF
+		self.w_leaf = self.vw_leaf / self.VWTLEAF
+		self.wr_leaf = wr_leaf
+		self.wft_leaf = wft_leaf
+		self.pi0_leaf = pi0_leaf
+		self.eta_leaf = eta_leaf
+		self.mcap_leaf = mcap_leaf
+		if c_leaf is None:
+			self.c_leaf = self.c_stem
+		else:
+			self.c_leaf = c_leaf
+
+		# Salt masses
+		self.MW_stem = self.c_stem * self.vw_stem
+		self.MW_leaf = self.c_leaf * self.vw_leaf
+
+		self.dt = dt
+		self.Salt_Uptake = salt_uptake
+		self.psi_wf_mode = psi_wf_mode
+
+		# Time series outputs
+		self.qs_a = []
+		self.gsr_a = [[] for _ in s_arr]
+		self.psi_l_a = []
+		self.tl_a = []
+		self.ev_a = []
+		self.gp_a = []
+		self.gsw_a = []
+		self.qbx_a = []
+		self.qxl_a = []
+		self.psi_x_a = []
+		self.psi_b_a = []
+
+		self.qw_stem_a = []
+		self.gw_stem_a = []
+		self.psi_w_stem_a = []
+		self.vw_stem_a = []
+		self.c_stem_a = []
+
+		self.qw_leaf_a = []
+		self.gw_leaf_a = []
+		self.psi_w_leaf_a = []
+		self.vw_leaf_a = []
+		self.c_leaf_a = []
+
+		self.flux_balance = []
+
+		# Initial solve for psi_l and tl
+		self.out = least_squares(
+			self.fBal,
+			(-1., 292.),
+			args=(
+				soil, photo, atm.phi, atm.ta, atm.qa, photo.cm,
+				s_arr, self.lai, self.gp, 1., self.zr,
+				root_frac_arr, B, cs_arr, dt,
+			),
+			bounds=([-10.0, 260.0], [0.0, 330.0]),
+			method='trf', ftol=3e-16, xtol=3e-16, x_scale='jac', max_nfev=2000
+		)
+		self.psi_l = self.out.x[0]
+		self.tl = self.out.x[1]
+		self.ev = self.evf(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, photo.cm, self.lai, 1.)
+
+	def _psi_wf_bartlett(self, vw, VWT, pi_0, wft, wr, eta, mcap, psi_0=0):
+		vr = VWT * wr
+		wtlp_tot = (1 - (vr / VWT)) * ((pi_0 + eta) / eta) + (vr / VWT)
+		vtlp = wtlp_tot * VWT
+		vft = wft * VWT
+		vw_safe = min(max(vw, vr + 1e-9), VWT)
+		if vft < vw_safe <= VWT:
+			return psi_0 + mcap * ((vw_safe / VWT) - 1)
+		if vtlp < vw_safe <= vft:
+			psi_osm = pi_0 * (VWT * wft - vr) / (vw_safe - vr)
+			psi_turgor = max(abs(pi_0) - eta * (VWT * wft - vw_safe) / (VWT * wft - vr), 0)
+			return psi_osm + psi_turgor
+		return pi_0 * (VWT * wft - vr) / (vw_safe - vr)
+
+	def _psi_wf_legacy(self, vw, MW, VWT, TL=293., eta=27.7, aF=0.75):
+		psi_osm_ft = -(MW / VWT) * R * self.IV * TL * 10.**(-6.)
+		psi_osm = psi_osm_ft / (vw / VWT)
+		psi_turgor = max(-psi_osm_ft - eta * ((1 - (vw / VWT)) / (1 - aF)), 0)
+		return psi_osm + psi_turgor
+
+	def psi_wf_stem(self, vw):
+		mode = str(getattr(self, 'psi_wf_mode', 'bartlett')).strip().lower()
+		if mode == 'legacy':
+			return self._psi_wf_legacy(vw, self.MW_stem, self.VWT_STEM, TL=self.TS)
+		return self._psi_wf_bartlett(vw, self.VWT_STEM, self.pi0_stem, self.wft_stem, self.wr_stem, self.eta_stem, self.mcap_stem)
+
+	def psi_wf_leaf(self, vw):
+		mode = str(getattr(self, 'psi_wf_mode', 'bartlett')).strip().lower()
+		if mode == 'legacy':
+			return self._psi_wf_legacy(vw, self.MW_leaf, self.VWTLEAF, TL=self.TS)
+		return self._psi_wf_bartlett(vw, self.VWTLEAF, self.pi0_leaf, self.wft_leaf, self.wr_leaf, self.eta_leaf, self.mcap_leaf)
+
+	def gwf_stem(self, psi_w_stem):
+		return self.GWMAX_STEM * (self.vw_stem / self.VWT_STEM)**4
+
+	def gwf_leaf(self, psi_w_leaf):
+		if self.VWTLEAF <= 0:
+			return 0.0
+		return self.GWLEAF * (self.vw_leaf / self.VWTLEAF)**4
+
+	def vwf_stem(self, vw_stem, ev, gp, psi_l, lai, dt, psi_x=None):
+		"""Update stem storage volume using the same vwf-style pattern as stem-only storage."""
+		psi_w_stem = self.psi_wf_stem(vw_stem)
+		if psi_x is None:
+			psi_x = self.psi_x(ev, psi_l, gp, lai)
+		return min(vw_stem - self.gwf_stem(psi_w_stem) * (psi_w_stem - psi_x) * dt / 10.**6, self.VWT_STEM)
+
+	def qwf_stem(self, vw_stem, ev, gp, psi_l, lai, dt, psi_x=None):
+		"""Stem storage flux per unit ground area (um/s) from change in stem storage."""
+		return (vw_stem - self.vwf_stem(vw_stem, ev, gp, psi_l, lai, dt, psi_x=psi_x)) * lai * 10.**6 / dt
+
+	def vwf_leaf(self, vw_leaf, psi_l, dt):
+		"""Update leaf storage volume using vwf-style dynamics at the leaf node."""
+		psi_w_leaf = self.psi_wf_leaf(vw_leaf)
+		return min(vw_leaf - self.gwf_leaf(psi_w_leaf) * (psi_w_leaf - psi_l) * dt / 10.**6, self.VWTLEAF)
+
+	def qwf_leaf(self, vw_leaf, psi_l, lai, dt):
+		"""Leaf storage flux per unit ground area (um/s) from change in leaf storage."""
+		return (vw_leaf - self.vwf_leaf(vw_leaf, psi_l, dt)) * lai * 10.**6 / dt
+
+	def psi_x(self, ev, psi_l, gp, lai, gw_leaf=None, psi_w_leaf=None):
+		# Requested updated form including leaf storage coupling.
+		gp_safe = max(gp, 1e-10)
+		if gw_leaf is None:
+			gw_leaf = self.gwf_leaf(self.psi_wf_leaf(self.vw_leaf))
+		if psi_w_leaf is None:
+			psi_w_leaf = self.psi_wf_leaf(self.vw_leaf)
+		return ev * (1 - self.F_CAP) / (lai * gp_safe) + psi_l - gw_leaf * (psi_w_leaf - psi_l)
+
+	def a(self, soil, s_arr, zr, psi_s_arr, B, root_frac_arr):
+		gsr_vals = self.gsr(soil, s_arr, zr, B, root_frac_arr)
+		return np.sum(gsr_vals * np.array(psi_s_arr))
+
+	def d(self, soil, s_arr, zr, B, root_frac_arr):
+		gsr_vals = self.gsr(soil, s_arr, zr, B, root_frac_arr)
+		return np.sum(gsr_vals)
+
+	def psi_b(self, soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai, ev, gw_leaf, psi_w_leaf):
+		psi_x_val = self.psi_x(ev, psi_l, gp, lai, gw_leaf=gw_leaf, psi_w_leaf=psi_w_leaf)
+		a_val = self.a(soil, s_arr, zr, psi_s_arr, B, root_frac_arr)
+		d_val = self.d(soil, s_arr, zr, B, root_frac_arr)
+		gp_term = gp * lai / self.F_CAP
+		denom = d_val + gp_term
+		if abs(denom) < 1e-12:
+			denom = 1e-12 if denom >= 0 else -1e-12
+		return (a_val + gp_term * psi_x_val) / denom
+
+	def qsf(self, soil, s_arr, zr, psi_s_arr, psi_b, B, root_frac_arr):
+		gsr_vals = self.gsr(soil, s_arr, zr, B, root_frac_arr)
+		return gsr_vals * (np.array(psi_s_arr) - psi_b)
+
+	def qbx(self, gp, psi_x, psi_b, lai):
+		return (gp * lai / self.F_CAP) * (psi_b - psi_x)
+
+	def qxl(self, gp, psi_x, psi_l, lai):
+		"""Xylem-to-leaf flux (um/s) for the stem+leaf storage configuration."""
+		return gp * lai / (1 - self.F_CAP) * (psi_x - psi_l)
+
+	def gsr(self, soil, s_arr, zr, B, root_frac_arr):
+		rr = 0.2 * 10 ** -3
+		kr = 10 ** -8
+		gsr_list = []
+		for s, root_frac in zip(s_arr, root_frac_arr):
+			B_val = B * root_frac
+			Ar = 2 * float(pi) * rr * B_val
+			l = 0.53 / (float(pi) * B_val) ** 0.5
+			ks = soil.leak(s) * 10 ** -6 / l
+			gsr_val = (kr * ks / (kr + ks)) * 101.9 * 10 ** 6 * Ar * zr
+			gsr_list.append(gsr_val)
+		return np.array(gsr_list)
+
+	def hr(self, qsf_arr):
+		return np.where(qsf_arr < 0, -qsf_arr, 0)
+
+	def uptake(self, qsf_arr, cs_arr, E=None):
+		if E is None:
+			E = self.E
+		if self.Salt_Uptake:
+			return np.sum(np.array(qsf_arr) * np.array(cs_arr)) * (1 - E) * 30 * 60 * 10**(-6)
+		return 0
+
+	def fBal(self, params, soil, photo, phi, ta, qa, c1, s_arr, lai, gp, ared, zr, root_frac_arr, B, cs_arr, dt):
+		psi_l, tl = params
+		evf_val = self.evf(photo, phi, ta, psi_l, qa, tl, c1, lai, ared)
+
+		psi_s_arr = soil.psi_s(soil.s, soil.cs)
+		psi_w_stem = self.psi_wf_stem(self.vw_stem)
+		gw_stem = self.gwf_stem(psi_w_stem)
+		psi_w_leaf = self.psi_wf_leaf(self.vw_leaf)
+		gw_leaf = self.gwf_leaf(psi_w_leaf)
+
+		psi_x_val = self.psi_x(evf_val, psi_l, gp, lai, gw_leaf=gw_leaf, psi_w_leaf=psi_w_leaf)
+		psi_b_val = self.psi_b(soil, soil.s, self.zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai, evf_val, gw_leaf, psi_w_leaf)
+		qbx_val = self.qbx(gp, psi_x_val, psi_b_val, lai)
+
+		# Stem and leaf storage fluxes from vwf-style storage updates.
+		qwf_stem = self.qwf_stem(self.vw_stem, evf_val, gp, psi_l, lai, dt, psi_x=psi_x_val)
+		qwf_leaf = self.qwf_leaf(self.vw_leaf, psi_l, lai, dt)
+
+		energy_balance = (
+			phi * lai
+			- self.shf(tl, ta, lai)
+			- LAMBDA_W * RHO_W * evf_val / 1_000_000.0
+		)
+		water_balance = evf_val - qbx_val - qwf_stem - qwf_leaf
+		return (water_balance, energy_balance)
+
+	def update(self, atm, soil, photo, root_frac_arr, B, cs_arr, dt):
+		self.out = least_squares(
+			self.fBal,
+			(-1., 292.),
+			args=(
+				soil, photo, atm.phi, atm.ta, atm.qa, photo.cm,
+				soil.s, self.lai, self.gp, 1., self.zr,
+				root_frac_arr, B, cs_arr, dt,
+			),
+			bounds=([-10.0, 260.0], [0.0, 330.0]),
+			method='trf', ftol=3e-16, xtol=3e-16, x_scale='jac', max_nfev=2000
+		)
+
+		self.psi_l = self.out.x[0]
+		self.tl = self.out.x[1]
+		self.gp = self.gpf(self.psi_l)
+		self.ev = self.evf(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, photo.cm, self.lai, 1.)
+
+		psi_w_stem = self.psi_wf_stem(self.vw_stem)
+		gw_stem = self.gwf_stem(psi_w_stem)
+		psi_w_leaf = self.psi_wf_leaf(self.vw_leaf)
+		gw_leaf = self.gwf_leaf(psi_w_leaf)
+
+		psi_s_arr = soil.psi_s(soil.s, soil.cs)
+		psi_x_val = self.psi_x(self.ev, self.psi_l, self.gp, self.lai, gw_leaf=gw_leaf, psi_w_leaf=psi_w_leaf)
+		psi_b_val = self.psi_b(soil, soil.s, self.zr, self.psi_l, psi_s_arr, B, root_frac_arr, self.gp, self.lai, self.ev, gw_leaf, psi_w_leaf)
+		self.qs = self.qsf(soil, soil.s, self.zr, psi_s_arr, psi_b_val, B, root_frac_arr)
+		self.qbxf = self.qbx(self.gp, psi_x_val, psi_b_val, self.lai)
+		self.qxlf = self.qxl(self.gp, psi_x_val, self.psi_l, self.lai)
+
+		self.qw_stem = self.qwf_stem(self.vw_stem, self.ev, self.gp, self.psi_l, self.lai, dt, psi_x=psi_x_val)
+		self.qw_leaf = self.qwf_leaf(self.vw_leaf, self.psi_l, self.lai, dt)
+
+		# Storage state updates
+		self.vw_stem = min(max(self.vwf_stem(self.vw_stem, self.ev, self.gp, self.psi_l, self.lai, dt, psi_x=psi_x_val), 1e-12), self.VWT_STEM)
+		self.vw_leaf = min(max(self.vwf_leaf(self.vw_leaf, self.psi_l, dt), 1e-12), self.VWTLEAF)
+		self.w_stem = self.vw_stem / self.VWT_STEM
+		self.w_leaf = self.vw_leaf / self.VWTLEAF
+
+		# Keep stem salt tracking as in the stem-only class; leaf salt can be expanded later.
+		uptake_val = self.uptake(self.qs, cs_arr)
+		self.MW_stem = self.MW_stem + uptake_val * dt
+		self.c_stem = self.MW_stem / self.vw_stem
+		self.c_leaf = self.MW_leaf / self.vw_leaf
+
+		self.flux_balance.append(np.sum(self.qs) + self.qw_stem + self.qw_leaf - self.ev)
+
+		# Store outputs
+		self.qs_a.append(self.qs)
+		gsr_vals = self.gsr(soil, soil.s, self.zr, B, root_frac_arr)
+		for i, gsr_val in enumerate(gsr_vals):
+			self.gsr_a[i].append(gsr_val)
+
+		self.psi_l_a.append(self.psi_l)
+		self.tl_a.append(self.tl)
+		self.ev_a.append(self.ev)
+		self.gp_a.append(self.gp)
+		self.gsw_a.append(self.gsw(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, photo.cx, photo.ared))
+
+		self.psi_x_a.append(psi_x_val)
+		self.psi_b_a.append(psi_b_val)
+		self.qbx_a.append(self.qbxf)
+		self.qxl_a.append(self.qxlf)
+
+		self.qw_stem_a.append(self.qw_stem)
+		self.gw_stem_a.append(gw_stem)
+		self.psi_w_stem_a.append(psi_w_stem)
+		self.vw_stem_a.append(self.vw_stem)
+		self.c_stem_a.append(self.c_stem)
+
+		self.qw_leaf_a.append(self.qw_leaf)
+		self.gw_leaf_a.append(gw_leaf)
+		self.psi_w_leaf_a.append(psi_w_leaf)
+		self.vw_leaf_a.append(self.vw_leaf)
+		self.c_leaf_a.append(self.c_leaf)
+
+	def output(self):
+		return {
+			'psi_l': self.psi_l_a,
+			'qs': self.qs_a,
+			'gp': self.gp_a,
+			'gsr': self.gsr_a,
+			'gsw': self.gsw_a,
+			'tl': self.tl_a,
+			'ev': self.ev_a,
+			'ev_cum': np.cumsum(list(i * 1.8 for i in self.ev_a)),
+			'psi_x': self.psi_x_a,
+			'psi_b': self.psi_b_a,
+			'qbx': self.qbx_a,
+			'qxl': self.qxl_a,
+			'flux_balance': self.flux_balance,
+			# Stem storage outputs (subscripted)
+			'qw_stem': self.qw_stem_a,
+			'gw_stem': self.gw_stem_a,
+			'psi_w_stem': self.psi_w_stem_a,
+			'vw_stem': self.vw_stem_a,
+			'c_stem': self.c_stem_a,
+			'w_stem': [vw / self.VWT_STEM for vw in self.vw_stem_a],
+			# Leaf storage outputs
+			'qw_leaf': self.qw_leaf_a,
+			'gw_leaf': self.gw_leaf_a,
+			'psi_w_leaf': self.psi_w_leaf_a,
+			'vw_leaf': self.vw_leaf_a,
+			'c_leaf': self.c_leaf_a,
+			'w_leaf': [vw / self.VWTLEAF for vw in self.vw_leaf_a],
+			# Compatibility aliases
+			'qw': self.qw_stem_a,
+			'psi_w': self.psi_w_stem_a,
+			'gwf': self.gw_stem_a,
+			'vw': self.vw_stem_a,
+		}
+
+
+class HalophyteNoStorageMultiComp(Hydro):
+	"""Multi-compartment, no-storage hydraulics compatible with SimulationMultiComp."""
+
+	def __init__(self, species, atm, soil, photo, vwi_stem, c_stem=None, s_arr=None, root_frac_arr=None, B=1.0,
+				 cs_arr=None, wr_stem=None, wft_stem=None, pi0_stem=None, eta_stem=None, mcap_stem=None, dt=1800,
+				 salt_uptake=False, psi_wf_mode='bartlett'):
+		Hydro.__init__(self, species)
+
+		if s_arr is None:
+			s_arr = soil.s
+		if root_frac_arr is None:
+			root_frac_arr = np.ones(len(s_arr)) / float(len(s_arr))
+		if cs_arr is None and hasattr(soil, 'cs'):
+			cs_arr = soil.cs
+
+		# Keep Halophyte-like constructor compatibility while using a no-storage formulation.
+		self.dt = dt
+		self.salt_uptake = salt_uptake
+		self.psi_wf_mode = psi_wf_mode
+		self.root_frac_arr = root_frac_arr
+		self.B = B
+
+		# Time-series outputs
+		self.qs_a = []
+		self.psi_l_a = []
+		self.tl_a = []
+		self.ev_a = []
+		self.gp_a = []
+		self.gsw_a = []
+		self.qbx_a = []
+		self.psi_b_a = []
+
+		self.out = least_squares(
+			self.fBal,
+			(-1., 292.),
+			args=(
+				soil, photo, atm.phi, atm.ta, atm.qa, self._photo_ci(photo),
+				s_arr, self.lai, self.gp, 1., self.zr, root_frac_arr, B, cs_arr
+			),
+			bounds=([-10.0, 260.0], [0.0, 330.0]),
+			method='trf', ftol=3e-16, xtol=3e-16, x_scale='jac', max_nfev=2000
+		)
+		self.psi_l = self.out.x[0]
+		self.tl = self.out.x[1]
+		self.gp = self.gpf(self.psi_l)
+		self.ev = self.evf(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, self._photo_ci(photo), self.lai, 1.)
+
+		psi_s_arr = self._psi_s_arr(soil, s_arr, cs_arr)
+		self.psi_b_val = self.psi_b(soil, s_arr, self.zr, self.psi_l, psi_s_arr, B, root_frac_arr, self.gp, self.lai)
+		self.qs = self.qsf(soil, s_arr, self.zr, psi_s_arr, self.psi_b_val, B, root_frac_arr)
+		self.qbx_val = self.qbx(self.gp, self.psi_b_val, self.psi_l, self.lai)
+
+	def _photo_ci(self, photo):
+		"""Support photo models that expose either cm or cx."""
+		if hasattr(photo, 'cm'):
+			return photo.cm
+		return photo.cx
+
+	def _psi_s_arr(self, soil, s_arr, cs_arr=None):
+		"""Compute soil water potential for all compartments for salty and non-salty soils."""
+		if cs_arr is not None:
+			return soil.psi_s(s_arr, cs_arr)
+		try:
+			return soil.psi_s(s_arr)
+		except TypeError:
+			if hasattr(soil, 'cs'):
+				return soil.psi_s(s_arr, soil.cs)
+			raise
+
+	def update(self, atm, soil, photo, root_frac_arr, B, cs_arr, dt):
+		if root_frac_arr is None:
+			root_frac_arr = self.root_frac_arr
+		if B is None:
+			B = self.B
+		if cs_arr is None and hasattr(soil, 'cs'):
+			cs_arr = soil.cs
+		self.root_frac_arr = root_frac_arr
+		self.B = B
+
+		self.out = least_squares(
+			self.fBal,
+			(-1., 292.),
+			args=(
+				soil, photo, atm.phi, atm.ta, atm.qa, self._photo_ci(photo),
+				soil.s, self.lai, self.gp, 1., self.zr, root_frac_arr, B, cs_arr
+			),
+			bounds=([-10.0, 260.0], [0.0, 330.0]),
+			method='trf', ftol=3e-16, xtol=3e-16, x_scale='jac', max_nfev=2000
+		)
+		self.psi_l = self.out.x[0]
+		self.tl = self.out.x[1]
+		self.gp = self.gpf(self.psi_l)
+		self.ev = self.evf(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, self._photo_ci(photo), self.lai, 1.)
+
+		psi_s_arr = self._psi_s_arr(soil, soil.s, cs_arr)
+		self.psi_b_val = self.psi_b(soil, soil.s, self.zr, self.psi_l, psi_s_arr, B, root_frac_arr, self.gp, self.lai)
+		self.qs = self.qsf(soil, soil.s, self.zr, psi_s_arr, self.psi_b_val, B, root_frac_arr)
+		self.qbx_val = self.qbx(self.gp, self.psi_b_val, self.psi_l, self.lai)
+
+		# Store outputs
+		self.qs_a.append(self.qs)
+		self.psi_l_a.append(self.psi_l)
+		self.tl_a.append(self.tl)
+		self.ev_a.append(self.ev)
+		self.gp_a.append(self.gp)
+		self.gsw_a.append(self.gsw(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, self._photo_ci(photo), 1.))
+		self.qbx_a.append(self.qbx_val)
+		self.psi_b_a.append(self.psi_b_val)
+
+	def output(self):
+		return {
+			'psi_l': self.psi_l_a,
+			'qs': self.qs_a,
+			'gp': self.gp_a,
+			'gsw': self.gsw_a,
+			'tl': self.tl_a,
+			'ev': self.ev_a,
+			'ev_cum': np.cumsum(list(i * 1.8 for i in self.ev_a)),
+			'psi_b': self.psi_b_a,
+			'qbx': self.qbx_a,
+		}
+
+	def a(self, soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr):
+		"""Weighted sum of soil-root conductance times soil water potential for all compartments."""
+		gsr_vals = self.gsr(soil, s_arr, zr, B, root_frac_arr)
+		return np.sum(gsr_vals * np.array(psi_s_arr))
+
+	def d(self, soil, s_arr, zr, psi_l, B, root_frac_arr):
+		"""Sum of soil-root conductances for all compartments."""
+		gsr_vals = self.gsr(soil, s_arr, zr, B, root_frac_arr)
+		return np.sum(gsr_vals)
+
+	def psi_b(self, soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai):
+		"""Basal root node potential without storage compartment."""
+		a_val = self.a(soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr)
+		d_val = self.d(soil, s_arr, zr, psi_l, B, root_frac_arr)
+		gp_term = gp * lai
+		denom = d_val + gp_term
+		if abs(denom) < 1e-12:
+			denom = 1e-12 if denom >= 0 else -1e-12
+		return (a_val + gp_term * psi_l) / denom
+
+	def qsf(self, soil, s_arr, zr, psi_s_arr, psi_b, B, root_frac_arr):
+		"""Soil water flux for multiple compartments (array output)."""
+		gsr_vals = self.gsr(soil, s_arr, zr, B, root_frac_arr)
+		return gsr_vals * (np.array(psi_s_arr) - psi_b)
+
+	def qbx(self, gp, psi_b, psi_l, lai):
+		"""Basal-to-xylem flow for no-storage configuration."""
+		return gp * lai * (psi_b - psi_l)
+
+	def gsr(self, soil, s_arr, zr, B, root_frac_arr):
+		"""Soil-Root conductance for multiple compartments (array output, B is constant)."""
+		rr = 0.2 * 10 ** -3
+		kr = 10 ** -8
+		gsr_list = []
+		for s, root_frac in zip(s_arr, root_frac_arr):
+			B_val = B * root_frac
+			Ar = 2 * float(pi) * rr * B_val
+			l = 0.53 / (float(pi) * B_val) ** 0.5
+			ks = soil.leak(s) * 10 ** -6 / l
+			gsr_val = (kr * ks / (kr + ks)) * 101.9 * 10 ** 6 * Ar * zr
+			gsr_list.append(gsr_val)
+		return np.array(gsr_list)
+
+	def fBal(self, params, soil, photo, phi, ta, qa, c1, s_arr, lai, gp, ared, zr, root_frac_arr, B, cs_arr):
+		"""Energy and water balance equations for multi-compartment Halophyte without storage."""
+		psi_l, tl = params
+		evf_val = self.evf(photo, phi, ta, psi_l, qa, tl, c1, lai, ared)
+		psi_s_arr = self._psi_s_arr(soil, s_arr, cs_arr)
+		psi_b_val = self.psi_b(soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai)
+		qbx_val = self.qbx(gp, psi_b_val, psi_l, lai)
+
+		energy_balance = (
+			phi * lai
+			- self.shf(tl, ta, lai)
+			- LAMBDA_W * RHO_W * evf_val / 1_000_000.0
+		)
+		water_balance = evf_val - qbx_val
 		return (water_balance, energy_balance)

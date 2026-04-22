@@ -119,7 +119,8 @@ class Pecan(object): #Pecan tree ()
 
 	ZR = 0.25  # rooting depth (m)
 	LAI = 1  # leaf area index (m2/m2)
-	GCUT = (0.22 * 10**-3 * VW) * 10**3  # Average cuticular rate from Cao, 2019 (mmol/m2/s) converted to mm/s
+	#
+	GCUT = 4.6 * (0.1/4.1)  # Minimum leaf conductance from plot by Rieger and Daniell, 1988 (mmol/m2/s) converted to mm/s using (0.1 mm/s / 4.1 mmol/m2/s) conversion factor from Kerstiens (1996)
 	GA = 185  # atmospheric conductance (mm/s)
 	RAIW = 14.3256  # Woodroof (1934), well-watered root area index (m2/m2)
 
@@ -128,11 +129,15 @@ class Pecan(object): #Pecan tree ()
 	GPMAX = 1000 * 8 * 10**-5 * (3900 / ((79 / 4) ** 2) * np.pi) * (((14.6 / 4) ** 2) * np.pi / 1010) / LAI
 
 	# Conductance/storage parameters
-	GWMAX = 0.054 * 0.0043 / (0.63 * 4 * 60 * 60)  # max conductance between storage water and xylem (um/MPa/s)
-	GWMAXLEAF = 0.0005  # Value from American Beech (um/MPa/s)
-	VWT = 0.27 / LAI * 0.1  # max PWS (m3/m2 leaf area); PWS assumed negligible
+	VWT =  0.0005 #0.0043 #.036 #0.0043 #0.036  # max stem water storage (m3/m2 leaf area); see assumptions in storage_volume_calcs notebook
 	VWTLEAF = 0.0504 * (1 / 1000)  # max leaf water storage (m3/m2 leaf area)
-	CAP = 0.15  # intrinsic plant hydraulic capacitance (MPa-1)
+	# max conductance between storage water and xylem (um/MPa/s)
+	# 0.054 is maximum stem capacitance from Zieminska (2020) in MPA. 
+	# 4 hours is the hysteresis time from sap flux data in Rieger and Daniel (1988).
+	CAP = 0.185  # Average turgor loss - full turgor intrinsic plant hydraulic capacitance. Average value from Cao (2019) (MPa-1)
+	GWMAX = CAP * VWT *10**6/ (0.63 * 4 * 60 * 60)  
+	GWMAXLEAF = 0.0005  # Value from American Beech (um/MPa/s)
+	
 
 	RD0 = 3.01  # Standard dark respiration at 25 C (umol/(m^2s))
 	HAV = 62000.  # Activation energy for Vc,max (J/mol)
