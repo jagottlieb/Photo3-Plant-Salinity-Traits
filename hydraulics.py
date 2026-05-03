@@ -7,11 +7,11 @@ from functions import *
 
 class Hydro(object):
 	A_ROOT = 8.
-	def __init__(self, species):
+	def __init__(self, species, gcut=None):
 		self.GPMAX = species.GPMAX
 		self.GA = species.GA
 		self.gp = species.GPMAX
-		self.GCUT = species.GCUT
+		self.GCUT = species.GCUT if gcut is None else gcut
 		self.RAIW = species.RAIW
 		self.zr = species.ZR
 		self.lai = species.LAI
@@ -266,6 +266,7 @@ class HalophyteStemStorageMultiComp(Hydro):
 		self.VWT = species.VWT
 		self.vw = vwi_stem * self.VWT
 		self.CAP = species.CAP
+		self.la = getattr(species, 'LA', None)
 		self.delta_c_stem = 0
 		self.delta_psi_w = 0
 		self.w = self.vw / self.VWT
@@ -453,7 +454,7 @@ class HalophyteStemStorageMultiComp(Hydro):
 		return self.psi_wf(vw, c_stem=c_stem)
 
 	def psi_wf(self, vw, c_stem=None):
-		"""Dispatch storage water potential formulation based on configured mode."""
+		"""Output storage water potential formulation based on configured mode."""
 		mode = str(getattr(self, 'psi_wf_mode', 'bartlett')).strip().lower()
 		if mode == 'legacy':
 			# Legacy behavior based on osmotic + turgor components.
@@ -483,7 +484,7 @@ class HalophyteStemStorageMultiComp(Hydro):
 		"""Calculate water potential using Bartlett et al. 2012 framework for a single value."""
 		
 		# Calculate key thresholds
-		vr = VWT * wr  # Residual volumetric water content
+		vr = VWT * wr  # Residual (apoplastic)volumetric water content
 		wtlp_tot = (1 - (vr/VWT)) * ((pi_0 + eta) / eta) + (vr/VWT)  # From Bartlett et al., 2012
 		vtlp = wtlp_tot * VWT  # Volumetric water content at turgor loss point
 		vft = wft * VWT  # Volumetric water content at full turgor
@@ -685,13 +686,15 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		psi_wf_mode='bartlett',
 		vwi_leaf=1.0,
 		c_leaf=None,
-		wr_leaf=0.1,
+		wr_leaf=0.46,
 		wft_leaf=1.0,
 		pi0_leaf=-1.5,
 		eta_leaf=5,
 		mcap_leaf=12,
+		gcut=None,
 	):
-		Hydro.__init__(self, species)
+		Hydro.__init__(self, species, gcut=gcut)
+		self.la = getattr(species, 'LA', None)
 
 		# Stem storage parameters
 		self.GWMAX_STEM = species.GWMAX
@@ -744,12 +747,16 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		self.qw_stem_a = []
 		self.gw_stem_a = []
 		self.psi_w_stem_a = []
+		self.psi_w_osm_stem_a = []
+		self.psi_w_turgor_stem_a = []
 		self.vw_stem_a = []
 		self.c_stem_a = []
 
 		self.qw_leaf_a = []
 		self.gw_leaf_a = []
 		self.psi_w_leaf_a = []
+		self.psi_w_osm_leaf_a = []
+		self.psi_w_turgor_leaf_a = []
 		self.vw_leaf_a = []
 		self.c_leaf_a = []
 
@@ -785,11 +792,52 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 			return psi_osm + psi_turgor
 		return pi_0 * (VWT * wft - vr) / (vw_safe - vr)
 
+	def _psi_wf_components_bartlett(self, vw, VWT, pi_0, wft, wr, eta, mcap, psi_0=0):
+		"""Return osmotic and turgor components (MPa) for Bartlett PV formulation."""
+		vr = VWT * wr
+		wtlp_tot = (1 - (vr / VWT)) * ((pi_0 + eta) / eta) + (vr / VWT)
+		vtlp = wtlp_tot * VWT
+		vft = wft * VWT
+		vw_safe = min(max(vw, vr + 1e-9), VWT)
+
+		psi_osm = pi_0 * (VWT * wft - vr) / (vw_safe - vr)
+		if vft < vw_safe <= VWT:
+			psi_total = psi_0 + mcap * ((vw_safe / VWT) - 1)
+			psi_turgor = max(psi_total - psi_osm, 0)
+		elif vtlp < vw_safe <= vft:
+			psi_turgor = max(abs(pi_0) - eta * (VWT * wft - vw_safe) / (VWT * wft - vr), 0)
+		else:
+			psi_turgor = 0.0
+		return psi_osm, psi_turgor
+
 	def _psi_wf_legacy(self, vw, MW, VWT, TL=293., eta=27.7, aF=0.75):
 		psi_osm_ft = -(MW / VWT) * R * self.IV * TL * 10.**(-6.)
 		psi_osm = psi_osm_ft / (vw / VWT)
 		psi_turgor = max(-psi_osm_ft - eta * ((1 - (vw / VWT)) / (1 - aF)), 0)
 		return psi_osm + psi_turgor
+
+	def _psi_wf_components_legacy(self, vw, MW, VWT, TL=293., eta=27.7, aF=0.75):
+		"""Return osmotic and turgor components (MPa) for legacy storage formulation."""
+		psi_osm_ft = -(MW / VWT) * R * self.IV * TL * 10.**(-6.)
+		psi_osm = psi_osm_ft / (vw / VWT)
+		psi_turgor = max(-psi_osm_ft - eta * ((1 - (vw / VWT)) / (1 - aF)), 0)
+		return psi_osm, psi_turgor
+
+	def psi_components_stem(self, vw):
+		mode = str(getattr(self, 'psi_wf_mode', 'bartlett')).strip().lower()
+		if mode == 'legacy':
+			return self._psi_wf_components_legacy(vw, self.MW_stem, self.VWT_STEM, TL=self.TS)
+		return self._psi_wf_components_bartlett(
+			vw, self.VWT_STEM, self.pi0_stem, self.wft_stem, self.wr_stem, self.eta_stem, self.mcap_stem
+		)
+
+	def psi_components_leaf(self, vw):
+		mode = str(getattr(self, 'psi_wf_mode', 'bartlett')).strip().lower()
+		if mode == 'legacy':
+			return self._psi_wf_components_legacy(vw, self.MW_leaf, self.VWTLEAF, TL=self.TS)
+		return self._psi_wf_components_bartlett(
+			vw, self.VWTLEAF, self.pi0_leaf, self.wft_leaf, self.wr_leaf, self.eta_leaf, self.mcap_leaf
+		)
 
 	def psi_wf_stem(self, vw):
 		mode = str(getattr(self, 'psi_wf_mode', 'bartlett')).strip().lower()
@@ -898,8 +946,10 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 
 		psi_s_arr = soil.psi_s(soil.s, soil.cs)
 		psi_w_stem = self.psi_wf_stem(self.vw_stem)
+		psi_w_osm_stem, psi_w_turgor_stem = self.psi_components_stem(self.vw_stem)
 		gw_stem = self.gwf_stem(psi_w_stem)
 		psi_w_leaf = self.psi_wf_leaf(self.vw_leaf)
+		psi_w_osm_leaf, psi_w_turgor_leaf = self.psi_components_leaf(self.vw_leaf)
 		gw_leaf = self.gwf_leaf(psi_w_leaf)
 
 		psi_x_val = self.psi_x(evf_val, psi_l, gp, lai, gw_leaf=gw_leaf, psi_w_leaf=psi_w_leaf)
@@ -937,8 +987,10 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		self.ev = self.evf(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, photo.cm, self.lai, 1.)
 
 		psi_w_stem = self.psi_wf_stem(self.vw_stem)
+		psi_w_osm_stem, psi_w_turgor_stem = self.psi_components_stem(self.vw_stem)
 		gw_stem = self.gwf_stem(psi_w_stem)
 		psi_w_leaf = self.psi_wf_leaf(self.vw_leaf)
+		psi_w_osm_leaf, psi_w_turgor_leaf = self.psi_components_leaf(self.vw_leaf)
 		gw_leaf = self.gwf_leaf(psi_w_leaf)
 
 		psi_s_arr = soil.psi_s(soil.s, soil.cs)
@@ -985,12 +1037,16 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		self.qw_stem_a.append(self.qw_stem)
 		self.gw_stem_a.append(gw_stem)
 		self.psi_w_stem_a.append(psi_w_stem)
+		self.psi_w_osm_stem_a.append(psi_w_osm_stem)
+		self.psi_w_turgor_stem_a.append(psi_w_turgor_stem)
 		self.vw_stem_a.append(self.vw_stem)
 		self.c_stem_a.append(self.c_stem)
 
 		self.qw_leaf_a.append(self.qw_leaf)
 		self.gw_leaf_a.append(gw_leaf)
 		self.psi_w_leaf_a.append(psi_w_leaf)
+		self.psi_w_osm_leaf_a.append(psi_w_osm_leaf)
+		self.psi_w_turgor_leaf_a.append(psi_w_turgor_leaf)
 		self.vw_leaf_a.append(self.vw_leaf)
 		self.c_leaf_a.append(self.c_leaf)
 
@@ -1013,6 +1069,8 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 			'qw_stem': self.qw_stem_a,
 			'gw_stem': self.gw_stem_a,
 			'psi_w_stem': self.psi_w_stem_a,
+			'psi_w_osm_stem': self.psi_w_osm_stem_a,
+			'psi_w_turgor_stem': self.psi_w_turgor_stem_a,
 			'vw_stem': self.vw_stem_a,
 			'c_stem': self.c_stem_a,
 			'w_stem': [vw / self.VWT_STEM for vw in self.vw_stem_a],
@@ -1020,12 +1078,16 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 			'qw_leaf': self.qw_leaf_a,
 			'gw_leaf': self.gw_leaf_a,
 			'psi_w_leaf': self.psi_w_leaf_a,
+			'psi_w_osm_leaf': self.psi_w_osm_leaf_a,
+			'psi_w_turgor_leaf': self.psi_w_turgor_leaf_a,
 			'vw_leaf': self.vw_leaf_a,
 			'c_leaf': self.c_leaf_a,
 			'w_leaf': [vw / self.VWTLEAF for vw in self.vw_leaf_a],
 			# Compatibility aliases
 			'qw': self.qw_stem_a,
 			'psi_w': self.psi_w_stem_a,
+			'psi_w_osm': self.psi_w_osm_stem_a,
+			'psi_w_turgor': self.psi_w_turgor_stem_a,
 			'gwf': self.gw_stem_a,
 			'vw': self.vw_stem_a,
 		}
