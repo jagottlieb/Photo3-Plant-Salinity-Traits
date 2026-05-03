@@ -218,6 +218,7 @@ class SaltySoilMultiple(SoilMultiple):
 			self.s = s_array[i]
 			# Call snew with scalar s value
 			new_s = self.dynamics[i].snew(self, dt, zr[i], qs[i])
+			new_s = float(np.clip(new_s, 1e-9, 1.0))
 			# Restore array and update compartment
 			self.s = s_array
 			self.s[i] = new_s
@@ -228,8 +229,17 @@ class SaltySoilMultiple(SoilMultiple):
 			self.cs_a[i].append(self.cs[i])
 	def output(self):
 		return {'s': self.s_a, 'cs': self.cs_a}
-	def psi_s(self, s, cs):
-		return self.PSI_SS*(s**-self.B) - cs*R*self.IV*self.TS*10.**(-6.)
+	def psi_s(self, s, cs=None, i=0):
+		s = np.atleast_1d(s)
+		s_safe = np.clip(s, 1e-9, None)
+		if cs is not None:
+			cs_val = np.atleast_1d(cs)
+		elif len(s_safe) == len(self.cs):
+			cs_val = self.cs
+		else:
+			cs_val = self.cs[i]
+		psi_s_val = self.PSI_SS*(s_safe**-self.B) - cs_val*R*self.IV*self.TS*10.**(-6.)
+		return psi_s_val if len(psi_s_val) > 1 or isinstance(cs, np.ndarray) else psi_s_val[0]
 
 class Loam(object):
 	PSI_SS = -1.43*10.**-3.

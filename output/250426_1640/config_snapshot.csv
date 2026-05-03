@@ -1,0 +1,4 @@
+duration,timestepM,dt,weatherFile,num_compartments,zr_arr,s_init_arr,cs_init_arr,root_frac_arr,B_param,vwi_stem,vwi_leaf,c_stem,c_leaf,wr_stem,wft_stem,eta_stem,mcap_stem,wr_leaf,wft_leaf,eta_leaf,mcap_leaf,psi_wf_mode,scenario_name,scenario_pi0_stem,scenario_pi0_leaf,scenario_VWT,scenario_gwmax_mode,scenario_GWMAX_manual,scenario_burn_in_days
+30,30,1800.0,sample_data\AgadirInterp30.xlsx,2,"[1.0, 1.0]","[0.4, 0.4]","[0.0, 35.0]","[0.5, 0.5]",500,0.85,0.9,5.0,,0.1,1.0,5,12,0.1,1.0,5,12,bartlett,S1,-0.9,-1.1,0.0043,equation,0.002,10
+30,30,1800.0,sample_data\AgadirInterp30.xlsx,2,"[1.0, 1.0]","[0.4, 0.4]","[0.0, 35.0]","[0.5, 0.5]",500,0.85,0.9,5.0,,0.1,1.0,5,12,0.1,1.0,5,12,bartlett,S2,-1.1,-1.4,0.0043,equation,0.002,10
+30,30,1800.0,sample_data\AgadirInterp30.xlsx,2,"[1.0, 1.0]","[0.4, 0.4]","[0.0, 35.0]","[0.5, 0.5]",500,0.85,0.9,5.0,,0.1,1.0,5,12,0.1,1.0,5,12,bartlett,S3,-1.6,-1.8,0.0043,equation,0.002,10
