@@ -676,7 +676,7 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		root_frac_arr,
 		B,
 		cs_arr,
-		wr_stem,
+		wr_stem, 
 		wft_stem,
 		pi0_stem,
 		eta_stem,
@@ -686,7 +686,7 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		psi_wf_mode='bartlett',
 		vwi_leaf=1.0,
 		c_leaf=None,
-		wr_leaf=0.46,
+		wr_leaf=0.46, # Reported by Rieger and Daniell for Pecan leaves
 		wft_leaf=1.0,
 		pi0_leaf=-1.5,
 		eta_leaf=5,
@@ -694,8 +694,6 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		gcut=None,
 	):
 		Hydro.__init__(self, species, gcut=gcut)
-		self.la = getattr(species, 'LA', None)
-
 		# Stem storage parameters
 		self.GWMAX_STEM = species.GWMAX
 		self.VWT_STEM = species.VWT
@@ -708,7 +706,8 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		self.mcap_stem = mcap_stem
 		self.c_stem = c_stem
 
-		# Leaf storage parameters (support either GWLEAF or GWMAXLEAF naming)
+		# Leaf storage parameters
+		self.la = getattr(species, 'LA', None)
 		self.GWLEAF = getattr(species, 'GWLEAF', getattr(species, 'GWMAXLEAF', 0.0))
 		self.VWTLEAF = getattr(species, 'VWTLEAF', 1e-6)
 		self.vw_leaf = vwi_leaf * self.VWTLEAF
@@ -1250,7 +1249,7 @@ class HalophyteNoStorageMultiComp(Hydro):
 		kr = 10 ** -8
 		gsr_list = []
 		for s, root_frac in zip(s_arr, root_frac_arr):
-			B_val = B * root_frac
+			B_val = B * root_frac 
 			Ar = 2 * float(pi) * rr * B_val
 			l = 0.53 / (float(pi) * B_val) ** 0.5
 			ks = soil.leak(s) * 10 ** -6 / l
