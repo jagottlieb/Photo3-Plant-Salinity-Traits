@@ -206,12 +206,14 @@ class SaltySoilMultiple(SoilMultiple):
 		self.cs = np.atleast_1d(cs)
 		if len(self.cs) == 1 and len(self.s) > 1:
 			self.cs = np.array([self.cs[0] for _ in self.s])
+		# Salt mass per compartment, mol/m2
 		self.MS = self.cs * self.ZR * self.N * self.s
 		self.cs_a = [[] for _ in self.s]
 	def update(self, dt, zr, qs):
 		qs = np.atleast_1d(qs)
 		zr = np.atleast_1d(zr)
-		# Store the array temporarily
+
+		# Scalar-safe compartment updates (matches DrydownSoil.snew signature).
 		s_array = self.s.copy()
 		for i in range(len(self.s)):
 			# Temporarily set soil.s to scalar for this compartment
@@ -223,12 +225,16 @@ class SaltySoilMultiple(SoilMultiple):
 			self.s = s_array
 			self.s[i] = new_s
 			s_array = self.s.copy()
-			
-			self.cs[i] = self.MS[i]/(self.s[i]*self.N*self.ZR[i])
+
+		# Match SaltySoil mass-balance update for salt concentration, per compartment.
+		self.cs = self.MS/(self.s*self.N*self.ZR)
+		psi_s_vals = np.atleast_1d(self.psi_s(self.s, cs=self.cs))
+
+		for i in range(len(self.s)):
 			self.s_a[i].append(self.s[i])
+			self.psi_s_a[i].append(psi_s_vals[i])
 			self.cs_a[i].append(self.cs[i])
-	def output(self):
-		return {'s': self.s_a, 'cs': self.cs_a}
+
 	def psi_s(self, s, cs=None, i=0):
 		s = np.atleast_1d(s)
 		s_safe = np.clip(s, 1e-9, None)

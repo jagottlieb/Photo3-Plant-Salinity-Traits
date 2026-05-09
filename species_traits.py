@@ -135,7 +135,7 @@ class Pecan(object): #Pecan tree ()
 	# 0.054 is maximum stem capacitance from Zieminska (2020) in MPA. 
 	# 4 hours is the hysteresis time from sap flux data in Rieger and Daniel (1988).
 	CAP = 0.185  # Average turgor loss - full turgor intrinsic plant hydraulic capacitance. Average value from Cao (2019) (MPa-1)
-	GWMAX = CAP * VWT *10**6/ (0.63 * 4 * 60 * 60)  
+	GWMAX = CAP * VWT *10**6/ (0.63 * 4 * 60 * 60) # this is high, but not totally unreasonable. Check against sap flux
 	GWMAXLEAF = 0.0005  # Value from American Beech (um/MPa/s)
 	
 

@@ -24,14 +24,17 @@ class Photo(object):
 	HAV =  72000.  # Activation Energy for Vc,max (J/mol)
 	HDV =  200000. # Deactivation Energy for Vc,max (J/mol)
 
-	def __init__(self, ptype, species):
+	def __init__(self, ptype, species, pi0_leaf=None, eta_leaf=None, PSILA0_tlp=False, cs_array=None):
 		self.ptype = ptype
 		if hasattr(species, 'RD0'): self.RD0 = species.RD0
 		if hasattr(species, 'HAV'): self.HAV = species.HAV
 		if hasattr(species, 'HDV'): self.HDV = species.HDV
 		self.VCMAX0 = species.VCMAX0
 		self.JMAX0 = species.JMAX0
-		self.PSILA0 = species.PSILA0
+		if PSILA0_tlp and pi0_leaf is not None and eta_leaf is not None:
+			self.PSILA0 = (pi0_leaf*eta_leaf/(pi0_leaf+eta_leaf))
+		else:
+			self.PSILA0 = species.PSILA0
 		self.PSILA1 = species.PSILA1
 		self.ared = 1.
 		self.light_atten = 1.
@@ -127,8 +130,8 @@ class C3(Photo):
 	GMGSRATIO = 1.65
 
 	KAPPA_2 = .3 # Quantum yield of photosynthesis (mol CO2/mol photon) 
-	def __init__(self, species, atm):
-		Photo.__init__(self, "C3", species)
+	def __init__(self, species, atm, pi0_leaf=-1.4, eta_leaf=17.5, PSILA0_tlp=True, cs_array=None):
+		Photo.__init__(self, "C3", species, pi0_leaf=pi0_leaf, eta_leaf=eta_leaf, PSILA0_tlp=PSILA0_tlp, cs_array=cs_array)
 		self.ca = atm.ca
 		self.cs = atm.ca
 		self.ci = self.ciNew(atm.cs, atm.ta, atm.qa)
@@ -156,8 +159,8 @@ class C3(Photo):
 class C3_cs_reduc(C3):
 	"""C3 photosynthesis with soil salt concentration reduction function from Sanchez-Ledesma et al. (2022) data for Pecan Seedlings"""
 	
-	def __init__(self, species, atm, cs_array=None):
-		C3.__init__(self, species, atm)
+	def __init__(self, species, atm, pi0_leaf=-1.4, eta_leaf=17.5, PSILA0_tlp=True, cs_array=None):
+		C3.__init__(self, species, atm, pi0_leaf=pi0_leaf, eta_leaf=eta_leaf, PSILA0_tlp=PSILA0_tlp, cs_array=cs_array)
 		self.reduction_factor = 0.0
 	
 	def a_cs_reduc(self):
@@ -197,8 +200,8 @@ class C4(Photo):
 	KP = 80. # Michaelis-Menten coefficient for C4 species (umol/(mol))
 
 	KAPPA_2 = .3 # Quantum yield of photosynthesis (mol CO2/mol photon) 
-	def __init__(self, species, atm):
-		Photo.__init__(self, "C4", species)
+	def __init__(self, species, atm, pi0_leaf=None, eta_leaf=None, PSILA0_tlp=False, cs_array=None):
+		Photo.__init__(self, "C4", species, pi0_leaf=pi0_leaf, eta_leaf=eta_leaf, PSILA0_tlp=PSILA0_tlp, cs_array=cs_array)
 		self.ca = atm.ca
 		self.cs = atm.ca
 		self.ci = self.ciNew(atm.cs, atm.ta, atm.qa)
