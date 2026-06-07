@@ -183,11 +183,47 @@ class C3_cs_reduc(C3):
 		self.cs_reduc_a.append(self.a_cs_reduc())
 	
 	def output(self):
-		return C3.output(self)
+		return {'a': self.a_a, 'psi_l_reduc': self.psi_l_reduc_a, 'photo_reduc': self.cs_reduc_a}
 	
 	def an(self, phi, psi_l, tl, ci, ared): 
 		"""Photosynthetic rate, per unit leaf area (umol/(m^2s))"""
 		return self.a_psilc02(psi_l) * self.a_phiciTl(phi, ci, tl, ared) * (1 - self.a_cs_reduc())
+
+class C3_c_leaf_reduc(C3):
+	"""C3 photosynthesis with leaf storage concentration reduction function"""
+	
+	def __init__(self, species, atm, pi0_leaf=-1.4, eta_leaf=17.5, PSILA0_tlp=True, cs_array=None):
+		C3.__init__(self, species, atm, pi0_leaf=pi0_leaf, eta_leaf=eta_leaf, PSILA0_tlp=PSILA0_tlp, cs_array=cs_array)
+		self.reduction_factor = 0.0
+		self.hydro_ref = None  # Reference to hydro object (set externally)
+		self.c_leaf_reduc_a = []
+	
+	def a_c_leaf_reduc(self):
+		"""Salinity reduction factor for photosynthesis based on leaf storage concentration (-)"""
+		return self.reduction_factor
+	
+	def update(self, atm, psi_l, tl, dt, soil=None):
+		"""Update photosynthesis with reduction factor applied based on c_leaf"""
+		# Update reduction factor from current leaf storage concentration before computing an()
+		if self.hydro_ref is not None and hasattr(self.hydro_ref, 'c_leaf'):
+			c_leaf_val = self.hydro_ref.c_leaf
+			self.reduction_factor = min(0.19 * max(c_leaf_val - 24.3, 0.0)**0.36, 0.9999)  # Cap reduction factor at 0.9999 to avoid complete shutdown of photosynthesis
+		else:
+			self.reduction_factor = 0.0
+		self.ci = self.ciNew(self.cs, atm.ta, atm.qa)
+		self.cm = self.cmNew(self.cs, atm.ta, atm.qa)
+		self.a = self.an(atm.phi, psi_l, tl, self.cm, self.ared)
+		self.a_a.append(self.a)
+		self.psi_l_reduc_a.append(1-self.a_psilc02(psi_l))
+		self.cs_reduc_a.append(self.a_c_leaf_reduc())
+		self.c_leaf_reduc_a.append(self.a_c_leaf_reduc())
+	
+	def output(self):
+		return {'a': self.a_a, 'psi_l_reduc': self.psi_l_reduc_a, 'photo_reduc': self.c_leaf_reduc_a}
+	
+	def an(self, phi, psi_l, tl, ci, ared): 
+		"""Photosynthetic rate, per unit leaf area (umol/(m^2s))"""
+		return self.a_psilc02(psi_l) * self.a_phiciTl(phi, ci, tl, ared) * (1 - self.a_c_leaf_reduc())
 
 class C4(Photo):
 	A1 = 0.5*15.

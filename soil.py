@@ -161,6 +161,7 @@ class SoilMultiple(object):
 		mask = (s > 0.0) & (s < 1.0)
 		result[mask] = .11574*self.KS*s[mask]**(2.*self.B + 3.)
 		return result if len(result) > 1 else result[0]
+	# psi_s (MPa)
 	def psi_s(self, s, cs=None, i=0):
 		"""Calculate soil water potential. 
 		Args:
