@@ -117,8 +117,8 @@ class Pecan(object): #Pecan tree ()
 	NAME = 'Pecan'
 	PTYPE = C3
 
-	ZR = 0.25  # rooting depth (m)
-	LAI = 1  # leaf area index (m2/m2)
+	ZR = 0.2  # rooting depth (m) - Rounded average of lab plants in June 2026
+	LAI = 17  # leaf area index (m2/m2) - average of lab plants in June 2026
 	#
 	GCUT = 4.6 * (0.1/4.1)  # Minimum leaf conductance from plot by Rieger and Daniell, 1988 (mmol/m2/s) converted to mm/s using (0.1 mm/s / 4.1 mmol/m2/s) conversion factor from Kerstiens (1996)
 	GA = 185  # atmospheric conductance (mm/s)
@@ -126,17 +126,18 @@ class Pecan(object): #Pecan tree ()
 
 	# Maximum xylem conductance per unit leaf area (um/MPa/s)
 	# Based on Steinberg et al. conversion and scaled by average lab plant measurements.
-	GPMAX = 1000 * 8 * 10**-5 * (3900 / ((79 / 4) ** 2) * np.pi) * (((14.6 / 4) ** 2) * np.pi / 1010) / LAI
+	GPMAX = (1000 * 8 * 10**-5) * (3900 / ((79 / 4) ** 2) * np.pi) * (((14.6 / 4) ** 2) * np.pi / 1010) / LAI
 
 	# Conductance/storage parameters
 	VWT =  0.011 #0.0043 #.036 #0.0043 #0.036  # max stem water storage (m3/m2 leaf area); see assumptions in storage_volume_calcs notebook
-	VWTLEAF = 0.0504 * (1 / 1000)  # max leaf water storage (m3/m2 leaf area)
+	VWTLEAF = 0.0001  # max leaf water storage (m3/m2 leaf area)
 	# max conductance between storage water and xylem (um/MPa/s)
 	# 0.054 is maximum stem capacitance from Zieminska (2020) in MPA. 
 	# 4 hours is the hysteresis time from sap flux data in Rieger and Daniel (1988).
-	CAP = 0.185  # Average turgor loss - full turgor intrinsic plant hydraulic capacitance. Average value from Cao (2019) (MPa-1)
-	GWMAX = CAP * VWT *10**6/ (0.63 * 4 * 60 * 60) # this is high, but not totally unreasonable. Check against sap flux
-	GWMAXLEAF = 0.0005  # Value from American Beech (um/MPa/s)
+	CAP = 0.185  # intrinsic plant hydraulic capacitance (between turgor loss point and full turgor ). Average value from Cao (2019) (MPa-1)
+	GWMAX = CAP * VWT *10**6/ (0.63 * 4 * 60 * 60) # stem storage-to-xylem conductance, um/(MPa s); high but plausible per sap-flux timescale
+	GWMAXLEAF = 0.001 # leaf storage-to-xylem conductance, um/(MPa s); rough estimate targeting faster turnover than stem storage
+	#GWMAXLEAF = 0.0005  # Value from American Beech, um/(MPa s)
 	
 
 	LA = 0.008  # leaf area (m2)
