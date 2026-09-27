@@ -56,6 +56,7 @@ class SaltySoil(object):
 	IV = 2. # van't hoff coefficient for NaCl
 	E = 0.95
 	def __init__(self, stype, zr, s, cs):
+		self.stype = stype
 		self.PSI_SS = stype.PSI_SS
 		self.B = stype.B
 		self.KS = stype.KS
@@ -77,7 +78,12 @@ class SaltySoil(object):
 	def output(self):
 		return {'s': self.s_a, 'cs': self.cs_a}
 	def psi_s(self, s):
-		return self.PSI_SS*(s**-self.B) - self.E*self.cs*R*self.IV*self.TS*10.**(-6.)
+		# Use the texture's own retention curve (Van Genuchten for Berger, Clapp-Hornberger otherwise)
+		if getattr(self.stype, 'VAN_GENUCHTEN', False):
+			matric = self.stype.psi_s(s)
+		else:
+			matric = self.PSI_SS*(s**-self.B)
+		return matric - self.E*self.cs*R*self.IV*self.TS*10.**(-6.)
 
 # --- Multi-compartment classes ---
 
@@ -159,7 +165,12 @@ class SoilMultiple(object):
 		result = np.zeros_like(s, dtype=float)
 		# Only compute on physically valid moisture values to avoid invalid powers
 		mask = (s > 0.0) & (s < 1.0)
-		result[mask] = .11574*self.KS*s[mask]**(2.*self.B + 3.)
+		if len(s) == len(self.stype):
+			for j in range(len(s)):
+				if mask[j]:
+					result[j] = self._texture_leak(self.stype[j], s[j])
+		else:
+			result[mask] = [self._texture_leak(self.stype[0], sv) for sv in s[mask]]
 		return result if len(result) > 1 else result[0]
 	# psi_s (MPa)
 	def psi_s(self, s, cs=None, i=0):
@@ -174,7 +185,14 @@ class SoilMultiple(object):
 		s = np.atleast_1d(s)
 		# Prevent invalid powers for dry/negative values
 		s_safe = np.clip(s, 1e-9, None)
-		
+
+		# Matric potential: each compartment uses its own texture's retention curve
+		# (Clapp-Hornberger by default, Van Genuchten for textures like Berger that define one)
+		if len(s_safe) == len(self.stype):
+			matric = np.array([self._texture_psi_s(self.stype[j], s_safe[j]) for j in range(len(s_safe))])
+		else:
+			matric = np.array([self._texture_psi_s(self.stype[i], sv) for sv in s_safe])
+
 		# If SaltySoil, include osmotic term
 		if self.cs is not None:
 			if cs is not None:
@@ -187,12 +205,22 @@ class SoilMultiple(object):
 				# s is scalar or single value, use indexed cs
 				cs_val = self.cs[i]
 			
-			psi_s_val = self.PSI_SS*(s_safe**-self.B) - cs_val*R*SaltySoil.IV*SaltySoil.TS*10.**(-6.)
+			psi_s_val = matric - cs_val*R*SaltySoil.IV*SaltySoil.TS*10.**(-6.)
 		else:
-			psi_s_val = self.PSI_SS*(s_safe**-self.B)
+			psi_s_val = matric
 		
 		# Return scalar if input was scalar, array otherwise
 		return psi_s_val if len(psi_s_val) > 1 or isinstance(cs, np.ndarray) else psi_s_val[0]
+	def _texture_psi_s(self, stype, s):
+		"""Matric potential (MPa) for one texture: Van Genuchten if defined, else Clapp-Hornberger."""
+		if getattr(stype, 'VAN_GENUCHTEN', False):
+			return stype.psi_s(s)
+		return stype.PSI_SS*(s**-stype.B)
+	def _texture_leak(self, stype, s):
+		"""Leakage/hydraulic conductivity for one texture: Mualem-Van Genuchten if defined, else Clapp-Hornberger."""
+		if getattr(stype, 'VAN_GENUCHTEN', False):
+			return stype.leak(s)
+		return .11574*stype.KS*s**(2.*stype.B + 3.)
 	def evap(self, s):
 		"""Calculate soil evaporation. Handles both scalar and array inputs."""
 		return np.where(s > self.SH, self.EVMAX*(s - self.SH)/(1. - self.SH), 0.)
@@ -239,13 +267,17 @@ class SaltySoilMultiple(SoilMultiple):
 	def psi_s(self, s, cs=None, i=0):
 		s = np.atleast_1d(s)
 		s_safe = np.clip(s, 1e-9, None)
+		if len(s_safe) == len(self.stype):
+			matric = np.array([self._texture_psi_s(self.stype[j], s_safe[j]) for j in range(len(s_safe))])
+		else:
+			matric = np.array([self._texture_psi_s(self.stype[i], sv) for sv in s_safe])
 		if cs is not None:
 			cs_val = np.atleast_1d(cs)
 		elif len(s_safe) == len(self.cs):
 			cs_val = self.cs
 		else:
 			cs_val = self.cs[i]
-		psi_s_val = self.PSI_SS*(s_safe**-self.B) - cs_val*R*self.IV*self.TS*10.**(-6.)
+		psi_s_val = matric - cs_val*R*self.IV*self.TS*10.**(-6.)
 		return psi_s_val if len(psi_s_val) > 1 or isinstance(cs, np.ndarray) else psi_s_val[0]
 
 class Loam(object):
@@ -292,3 +324,36 @@ class Clay(object):
 	SH = .47
 	def __init__(self):
 		pass
+
+class Berger(object):
+	"""Berger soil texture: Van Genuchten retention curve, Mualem unsaturated hydraulic conductivity."""
+	VAN_GENUCHTEN = True
+	TH_R = 0.155
+	TH_S = 0.807
+	ALPHA = 0.0502   # 1/cm
+	VG_N = 1.768
+	VG_M = 1 - 1/VG_N
+	L = 0.5   # pore-connectivity/tortuosity parameter
+	N = 0.8   # measured porosity; relative saturation s = theta/N
+	# Unused (Van Genuchten/Mualem used instead); kept so generic soil-type lookups don't fail
+	PSI_SS = None
+	B = None
+	KS = 1.
+	SH = .15
+	def __init__(self):
+		pass
+	def psi_s(self, s):
+		"""Van Genuchten matric potential (MPa) from relative soil moisture s = theta/N."""
+		s = np.asarray(s, dtype=float)
+		theta = np.clip(s, 1e-9, None) * self.N
+		Se = np.clip((theta - self.TH_R) / (self.TH_S - self.TH_R), 1e-6, 1. - 1e-6)
+		h_cm = (1. / self.ALPHA) * (Se**(-1. / self.VG_M) - 1.)**(1. / self.VG_N)
+		h_kpa = h_cm * 0.0980665  # cm H2O -> kPa
+		return -h_kpa * 1e-3  # kPa -> MPa, negative = suction
+	def leak(self, s):
+		"""Mualem-Van Genuchten unsaturated hydraulic conductivity: K(Se) = Ks*Se^L*[1-(1-Se^(1/m))^m]^2."""
+		s = np.asarray(s, dtype=float)
+		theta = np.clip(s, 1e-9, None) * self.N
+		Se = np.clip((theta - self.TH_R) / (self.TH_S - self.TH_R), 1e-6, 1. - 1e-6)
+		k_rel = Se**self.L * (1. - (1. - Se**(1. / self.VG_M))**self.VG_M)**2
+		return .11574*self.KS*k_rel

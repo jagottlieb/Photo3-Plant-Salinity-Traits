@@ -34,7 +34,7 @@ resultsFile = tk.StringVar(value = 'sample_output\guitest') # default value for 
 
 capOptions = {"No": HydroNC, "Yes": HydroCap}
 speciesOptions = {"Triticum aestivum": Taest, "Sorghum bicolor": Sbico, "Opuntia ficus-indica": Oficu}
-soilOptions = {"Sand": Sand, "Sandy loam": SandyLoam, "Loamy sand": LoamySand, "Loam": Loam, "Clay": Clay}
+soilOptions = {"Sand": Sand, "Sandy loam": SandyLoam, "Loamy sand": LoamySand, "Loam": Loam, "Clay": Clay, "Berger": Berger}
 rainOptions = {"Drydown": DrydownSoil(), "Constant": ConstantSoil(), "Stochastic rainfall": StochasticSoil(1.5, .3)}
 
 # Take inputs from GUI

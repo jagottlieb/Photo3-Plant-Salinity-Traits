@@ -121,7 +121,7 @@ class Pecan(object): #Pecan tree ()
 	LAI = 17  # leaf area index (m2/m2) - average of lab plants in June 2026
 	#
 	GCUT = 4.6 * (0.1/4.1)  # Minimum leaf conductance from plot by Rieger and Daniell, 1988 (mmol/m2/s) converted to mm/s using (0.1 mm/s / 4.1 mmol/m2/s) conversion factor from Kerstiens (1996)
-	GA = 185  # atmospheric conductance (mm/s)
+	GA = 185  # atmospheric conductance (mm/s) - Duncan reports a wind speed of 0.1-3 m/s. THe's using a ga of 0.05 
 	RAIW = 14.3256  # Woodroof (1934), well-watered root area index (m2/m2)
 
 	# Maximum xylem conductance per unit leaf area (um/MPa/s)

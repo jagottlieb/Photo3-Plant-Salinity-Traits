@@ -9,5 +9,8 @@ modelCAMint.pyc
 # Generated diagnostic output folders
 sample_output/Diagnostic_*_GWHalophyteSSensitivityAnalysis/
 
+# Generated run output folders
+output/
+
 # Jupyter temp artifacts
 .ipynb_checkpoints/
