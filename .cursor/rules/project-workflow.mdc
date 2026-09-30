@@ -1,0 +1,31 @@
+---
+description: Session start scan, cleanup suggestions, commit convention
+alwaysApply: true
+---
+# Photo3 Salinity Traits - Workflow
+
+## Codebase map
+- defs.py: Simulation classes, Atmosphere, timestep setup
+- photosynthesis.py / hydraulics.py / soil.py: mixin sub-models (C3, storage, salty soils)
+- species_traits.py: species parameter sets
+- functions.py, dics.py: global functions and constants
+- sensitivity_analysis.py: SensitivityAnalyzer (OAT, interactions, Sobol)
+- Notebooks: *_vN.ipynb (latest version is active); Archive/ holds legacy code
+- output/ is generated and gitignored
+
+## Start of each new chat (keep it light)
+1. Run `git status -sb` and note branch and ahead/behind vs origin.
+2. Use the codebase map above; open other files only if the task needs them.
+3. Never read whole .ipynb files during the scan (embedded outputs are huge).
+4. Give a 2-3 line status summary, then suggest cleanup items if any:
+   untracked or stray files, generated artifacts (e.g. *_executed.ipynb),
+   superseded _vN notebooks or scripts to move to Archive/.
+   Ask before changing anything.
+
+## Commits
+- When a discrete chunk of work is done, propose a commit and ask before pushing.
+- Message: imperative, <=72 chars, clauses joined by semicolons
+  (e.g. "Add OAT screening; save rankings to output/").
+- Only stage files related to the work; never commit output/ or executed notebooks.
+- At each push, repeat the cleanup suggestion check.
+- After pushing, suggest starting a new chat for the next chunk of work.

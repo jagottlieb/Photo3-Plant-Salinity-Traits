@@ -1,0 +1,16 @@
+---
+description: Python and notebook conventions for the Photo3 model
+globs: "**/*.py,**/*.ipynb"
+alwaysApply: false
+---
+# Python Conventions
+
+- Extend the model through the existing mixin/class pattern (defs, photosynthesis,
+  hydraulics, soil); don't duplicate sub-model logic in notebooks or scripts.
+- Species parameters live in species_traits.py.
+- Config and parameter sets go in YAML files (config/), not hard-coded dicts.
+- Docstrings plus type hints on new functions and classes.
+- Plots: seaborn whitegrid, serif font stack as in sensitivity_analysis.py.
+- New notebook versions: copy to _v(N+1); move the superseded version to Archive/.
+- Write results to output/ (gitignored).
+- Environment: conda.
