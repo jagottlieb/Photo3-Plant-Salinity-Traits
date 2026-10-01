@@ -14,3 +14,7 @@ output/
 
 # Jupyter temp artifacts
 .ipynb_checkpoints/
+
+# Sensitivity analysis results: keep only the frozen per-batch config
+SensitivityAnalysis/*/results/*/*
+!SensitivityAnalysis/*/results/*/config.yaml
