@@ -130,14 +130,14 @@ class Pecan(object): #Pecan tree ()
 
 	# Conductance/storage parameters
 	VWT =  0.011 #0.0043 #.036 #0.0043 #0.036  # max stem water storage (m3/m2 leaf area); see assumptions in storage_volume_calcs notebook
-	VWTLEAF = 0.0001  # max leaf water storage (m3/m2 leaf area)
+	VWTLEAF = 0.00005  # max leaf water storage (m3/m2 leaf area) # From american beech
 	# max conductance between storage water and xylem (um/MPa/s)
 	# 0.054 is maximum stem capacitance from Zieminska (2020) in MPA. 
 	# 4 hours is the hysteresis time from sap flux data in Rieger and Daniel (1988).
 	CAP = 0.185  # intrinsic plant hydraulic capacitance (between turgor loss point and full turgor ). Average value from Cao (2019) (MPa-1)
 	GWMAX = CAP * VWT *10**6/ (0.63 * 4 * 60 * 60) # stem storage-to-xylem conductance, um/(MPa s); high but plausible per sap-flux timescale
-	GWMAXLEAF = 0.001 # leaf storage-to-xylem conductance, um/(MPa s); rough estimate targeting faster turnover than stem storage
-	#GWMAXLEAF = 0.0005  # Value from American Beech, um/(MPa s)
+	#GWMAXLEAF = 0.001 # leaf storage-to-xylem conductance, um/(MPa s); rough estimate targeting faster turnover than stem storage
+	GWMAXLEAF = 0.0005  # Value from American Beech, um/(MPa s)
 	
 
 	LA = 0.008  # leaf area (m2)
