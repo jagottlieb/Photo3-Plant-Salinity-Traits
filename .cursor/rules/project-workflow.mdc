@@ -9,7 +9,11 @@ alwaysApply: true
 - photosynthesis.py / hydraulics.py / soil.py: mixin sub-models (C3, storage, salty soils)
 - species_traits.py: species parameter sets
 - functions.py, dics.py: global functions and constants
-- sensitivity_analysis.py: SensitivityAnalyzer (OAT, interactions, Sobol)
+- SensitivityAnalysis/: phase-based sensitivity runs
+  - sensitivity_analysis.py runs a Phase config; post_processing.py makes figures
+  - SensitivityAnalysisPlan.md describes the phases
+  - "Phase N - name/" folders hold config.yaml and results/<batch_id>/
+    (only each batch's frozen config.yaml is tracked)
 - Notebooks: *_vN.ipynb (latest version is active); Archive/ holds legacy code
 - output/ is generated and gitignored
 
@@ -25,7 +29,8 @@ alwaysApply: true
 ## Commits
 - When a discrete chunk of work is done, propose a commit and ask before pushing.
 - Message: imperative, <=72 chars, clauses joined by semicolons
-  (e.g. "Add OAT screening; save rankings to output/").
-- Only stage files related to the work; never commit output/ or executed notebooks.
+  (e.g. "Add Phase 2 config; plot storage volumes").
+- Only stage files related to the work; never commit output/, batch results
+  (other than frozen configs) or executed notebooks.
 - At each push, repeat the cleanup suggestion check.
 - After pushing, suggest starting a new chat for the next chunk of work.
