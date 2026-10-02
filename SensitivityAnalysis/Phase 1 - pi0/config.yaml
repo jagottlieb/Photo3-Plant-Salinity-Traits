@@ -14,7 +14,7 @@ phase:
 
 simulation:
   species: Pecan                      # class name in species_traits.py
-  weather_file: sample_data/Lab_Weather_Joined_Interp30.xlsx   # ~22.9 days at 30 min
+  weather_file: data/weather_data/lab_weather_data/Lab_Weather_Joined_Interp30.xlsx   # ~22.9 days at 30 min
   timestepM: 30                       # model timestep (min)
   burn_in_days: 7                     # soil held constant, no salt uptake
   analysis_days: 15                   # window after burn-in; total = 22 days

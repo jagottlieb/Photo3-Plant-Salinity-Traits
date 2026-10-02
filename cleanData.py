@@ -14,7 +14,7 @@ import xlrd
 # data cannot contain gaps larger than 23 hours
 # Excel sheet containing data must not additional text beyond headers
 
-xl = pd.ExcelFile("sample_data/TempleApril2015.xlsx")
+xl = pd.ExcelFile("data/weather_data/sample_data_photo3/TempleApril2015.xlsx")
 data = xl.parse("Sheet1")
 
 # convert time array to simple vector of datenumbers
@@ -26,6 +26,6 @@ converted = converted.interpolate()
 converted['GHI'].plot()
 plt.show()
 
-writer = pd.ExcelWriter('sample_data/TempleApril2015Interp30.xlsx')
+writer = pd.ExcelWriter('data/weather_data/sample_data_photo3/TempleApril2015Interp30.xlsx')
 converted.to_excel(writer,'Sheet1')
 writer.save()

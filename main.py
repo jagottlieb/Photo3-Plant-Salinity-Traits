@@ -15,7 +15,7 @@ import importlib as importlib
 
 # Model settings for duration, input and output file locations, and model timestep
 duration = 10 # simulation duration in days
-weatherFile = "sample_data\TempleApril2015Interp30.xlsx" # location of weather data with air temperature, air relative humidity, and solar radiation
+weatherFile = r"data\weather_data\sample_data_photo3\TempleApril2015Interp30.xlsx" # location of weather data with air temperature, air relative humidity, and solar radiation
 resultsFile = 'sample_output/test' # default value for the location where results are saved
 timestepM = 30 # Model change in time at each step (min)
 timestepD = 30 # timestep of input data (min)

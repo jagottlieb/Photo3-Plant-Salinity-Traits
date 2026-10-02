@@ -3,13 +3,13 @@ The Photo3 model describes C3, C4, and CAM photosynthesis in a consistent manner
 
 # Model Execution
 
-To run the model, simply download the included files to the same folder and run the main file (main_gui.py). A graphical user interface (GUI) will display allowing the user to choose a plant species, soil type, soil moisture, duration of the simulation, and a data file containing weather inputs (solar radiation, temperature, and humidity). Results will be exported to the file location chosen in the user interface, and/or may be viewed directly from the command prompt or IDE. The sample_data folder contains some sample weather inputs, and the sample_output folder contains results from a few example simulations. For more control over model set-up, the user can utilize the main.py file, which does not involve a graphical user interface.
+To run the model, simply download the included files to the same folder and run the main file (main_gui.py). A graphical user interface (GUI) will display allowing the user to choose a plant species, soil type, soil moisture, duration of the simulation, and a data file containing weather inputs (solar radiation, temperature, and humidity). Results will be exported to the file location chosen in the user interface, and/or may be viewed directly from the command prompt or IDE. The data/weather_data/sample_data_photo3 folder contains some sample weather inputs, and the sample_output folder contains results from a few example simulations. For more control over model set-up, the user can utilize the main.py file, which does not involve a graphical user interface.
 
 # Model Structure
 
 The model is structured in an object-oriented fashion, using mixins to combine photosynthetic, hydraulic, soil, and atmosphere sub-components. The main_gui.py script is the engine which runs the model, calling on the gui.py file to create a GUI which interprets the user's input to the model and creating a Simulation() object which is updated at each timestep according to the model inputs. The defs.py file contains the definitions of the classes and their functions, the dics.py file contains the model global variables, and the functions.py file contains the model global functions. Alternatively, the model can be executed by running the main.py script, which does not involve a GUI. The user may directly change the input variables within the file main.py.
 
-To run the model, simply run the file main_gui.py. A graphical user interface will display allowing the user to choose a plant species, soil type, soil moisture, duration of the simulation, and a data file containing weather inputs (solar radiation, temperature, and humidity). The results are then generated and exported to the selected folder as a pandas dataframe. The sample_data folder contains sample weather inputs for a location in Temple, TX, and the sample_output folder contains results generated using the sample data.
+To run the model, simply run the file main_gui.py. A graphical user interface will display allowing the user to choose a plant species, soil type, soil moisture, duration of the simulation, and a data file containing weather inputs (solar radiation, temperature, and humidity). The results are then generated and exported to the selected folder as a pandas dataframe. The data/weather_data/sample_data_photo3 folder contains sample weather inputs for a location in Temple, TX, and the sample_output folder contains results generated using the sample data.
 
 An academic article describing the model details is available in Ecological Modelling:
 
@@ -18,7 +18,7 @@ An academic article describing the model details is available in Ecological Mode
 # Instructions for formatting weather data for the model input
 Half hourly data for solar radiation, temperature, and specific humidity is needed to run the Photo3 model. Hourly data may be obtained from a variety of sources and then interpolated to the model timestep of 30 minutes using the script cleanData.py, which will produce a new excel file which can be read into the model. In order to use cleanData.py, the data must first be formatted with the following columns: Year, Month, Day, Hour, Minute, GHI, Temperature, Relative Humidity. Data cannot contain gaps larger than 23 hours.
 
-The final weather data file supplied to the model should have the headings: Temperature, Relative Humidity, GHI, and should match the model timestep of 30 minutes (see example files in the sample_data folder).
+The final weather data file supplied to the model should have the headings: Temperature, Relative Humidity, GHI, and should match the model timestep of 30 minutes (see example files in the data/weather_data/sample_data_photo3 folder).
 
 # Publications
 

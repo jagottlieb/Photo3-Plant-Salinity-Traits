@@ -14,6 +14,7 @@ alwaysApply: true
   - SensitivityAnalysisPlan.md describes the phases
   - "Phase N - name/" folders hold config.yaml and results/<batch_id>/
     (only each batch's frozen config.yaml is tracked)
+- data/: weather_data/, soil_data/, sap_flux/, literature_data/ inputs and helper notebooks
 - Notebooks: *_vN.ipynb (latest version is active); Archive/ holds legacy code
 - output/ is generated and gitignored
 
