@@ -14,7 +14,7 @@ phase:
 
 simulation:
   species: Pecan                      # class name in species_traits.py
-  weather_file: data/weather_data/lab_weather_data/Lab_Weather_Joined_Interp30.xlsx   # ~22.9 days at 30 min
+  weather_file: data/weather_data/lab_weather_data/Lab_Weather_Summer_Average_Day_30min.xlsx   # average summer day repeated for 45 days at 30 min
   timestepM: 30                       # model timestep (min)
   burn_in_days: 7                     # soil held constant, no salt uptake
   analysis_days: 15                   # window after burn-in; total = 22 days
@@ -103,7 +103,7 @@ plots:
     font_size: 10
     linewidth: 1.2
     run_colors: {low: "#9ecae1", med: "#4292c6", high: "#08519c"}
-    xlabel: "Days since end of burn-in"
+    xlabel: "Days"
     display_names:                  # parameter name -> legend text (matplotlib mathtext)
       pi0_leaf: "$\\pi_{0,leaf}$"
       pi0_stem: "$\\pi_{0,stem}$"

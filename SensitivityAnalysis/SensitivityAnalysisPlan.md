@@ -76,7 +76,7 @@ Every batch saves **all** model output variables per timestep (see `timeseries/*
 - Med (baseline): `pi0_leaf` = -1.4, `pi0_stem` = -1.1
 - High: `pi0_leaf` = -1.7, `pi0_stem` = -1.3
 - Scenario: Drydown (S2) by default; set `active_scenarios` in the config
-- Simulation: 7-day burn-in plus 15-day analysis window (the lab weather file covers about 22.9 days)
+- Simulation: 7-day burn-in plus 15-day analysis window (weather is `Lab_Weather_Summer_Average_Day_30min.xlsx`: the time-of-day mean of the lab record, repeated for 45 days)
 - Figures: 15-day time series of transpiration, root uptake, storage fluxes and psi_l
 
 Candidate parameters for later phases: storage volumes (`VWT`, `VWTLEAF`), storage conductances (`GWMAX`, `GWMAXLEAF`), elastic moduli (`eta_stem`, `eta_leaf`), and salinity settings (`cs_init`, `E`, `dynamic_E`).

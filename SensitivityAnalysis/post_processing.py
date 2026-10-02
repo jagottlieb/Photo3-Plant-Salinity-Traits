@@ -172,7 +172,7 @@ def _plot_timeseries(
 
     if common.get("window_days") is not None:
         axes[-1].set_xlim(common["window_days"])
-    axes[-1].set_xlabel(common.get("xlabel", "Days since end of burn-in"))
+    axes[-1].set_xlabel(common.get("xlabel", "Days"))
     fig.suptitle(f"{plot_cfg.get('title', '')} ({rows['scenario_label'].iloc[0]})")
     fig.tight_layout()
 
