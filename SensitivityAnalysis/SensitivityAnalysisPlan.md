@@ -75,7 +75,7 @@ Every batch saves **all** model output variables per timestep (see `timeseries/*
 - Low: `pi0_leaf` = -1.1, `pi0_stem` = -0.9
 - Med (baseline): `pi0_leaf` = -1.4, `pi0_stem` = -1.1
 - High: `pi0_leaf` = -1.7, `pi0_stem` = -1.3
-- Scenario: Drydown (S2) by default; set `active_scenarios` in the config
+- Scenario: Drydown (S2) by default; set `active_scenarios` in the config. S2 starts both compartments at `s_init` = 0.32 and dries both after burn-in. Starting from 0.45 with 1 m compartments barely dries the soil in 15 days, and below about 0.29 transpiration sits at its floor from day 0 (below 0.26 the leaf water potential solver fails)
 - Simulation: 7-day burn-in plus 15-day analysis window (weather is `Lab_Weather_Summer_Average_Day_30min.xlsx`: the time-of-day mean of the lab record, repeated for 45 days)
 - Figures: 15-day time series of transpiration, root uptake, storage fluxes and psi_l
 
