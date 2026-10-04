@@ -207,6 +207,37 @@ def load_weather(path: Path, timestepM: float, total_days: float) -> Dict[str, L
     }
 
 
+def resolve_zr_arr(sim_cfg: Dict[str, Any], params: Dict[str, Any], species_obj: Any) -> np.ndarray:
+    """Return compartment depths from the config, or from the species rooting depth.
+
+    ``simulation.zr_arr: species`` sets every compartment depth to ``species.ZR``,
+    with one compartment per ``s_init`` entry. An explicit list is used as given.
+
+    Args:
+        sim_cfg: The config ``simulation`` section.
+        params: Resolved model parameters (``s_init`` and ``root_frac`` set the compartment count).
+        species_obj: Species instance from ``species_traits``.
+
+    Returns:
+        Compartment depths (m), one per compartment.
+    """
+    n_comp = len(params["s_init"])
+    zr_cfg = sim_cfg["zr_arr"]
+    if isinstance(zr_cfg, str):
+        if zr_cfg.strip().lower() != "species":
+            raise ValueError(f"zr_arr must be a list or 'species', got '{zr_cfg}'")
+        zr_arr = np.full(n_comp, float(species_obj.ZR))
+    else:
+        zr_arr = np.array(zr_cfg, dtype=float)
+
+    if len(zr_arr) != n_comp or len(params["root_frac"]) != n_comp:
+        raise ValueError(
+            f"zr_arr ({len(zr_arr)}), root_frac ({len(params['root_frac'])}) and "
+            f"s_init ({n_comp}) must have the same number of compartments"
+        )
+    return zr_arr
+
+
 def build_model(params: Dict[str, Any], sim_cfg: Dict[str, Any], weather: Dict[str, List[float]]) -> Dict[str, Any]:
     """Build a SimulationMultiComp model with stem and leaf storage from config values.
 
@@ -219,11 +250,11 @@ def build_model(params: Dict[str, Any], sim_cfg: Dict[str, Any], weather: Dict[s
         Dict with ``plant``, ``hydro`` and ``species`` objects.
     """
     dt = float(sim_cfg["timestepM"]) * 60.0
-    zr_arr = np.array(sim_cfg["zr_arr"], dtype=float)
     root_frac_arr = np.array(params["root_frac"], dtype=float)
     cs_init = np.array(params["cs_init"], dtype=float)
 
     species_obj = getattr(species_traits, sim_cfg["species"])()
+    zr_arr = resolve_zr_arr(sim_cfg, params, species_obj)
     species_obj.VWT = float(params["VWT"])
     species_obj.VWTLEAF = float(params["VWTLEAF"])
     species_obj.GWMAXLEAF = float(params["GWMAXLEAF"])

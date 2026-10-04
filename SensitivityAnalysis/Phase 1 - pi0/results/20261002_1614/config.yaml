@@ -131,7 +131,7 @@ plots:
     panel_titles: ["Compartment 1", "Compartment 2"]
     scale: 1.0
     ylabel: "Root water uptake, $q_s$ ($\\mu$m s$^{-1}$)"
-    ylim: [0, 0.045]                # shared by both compartment panels
+    ylim: [0, 0.03]                 # shared by both compartment panels
     title: "Root water uptake"
 
   soil_water_potential:
@@ -141,7 +141,7 @@ plots:
     panel_titles: ["Compartment 1", "Compartment 2"]
     scale: 1.0
     ylabel: "Soil water potential, $\\psi_s$ (MPa)"
-    ylim: [-0.07, 0]                # shared by both compartment panels
+    ylim: [-0.09, 0]                # shared by both compartment panels
     title: "Soil water potential"
 
   storage_fluxes:
@@ -169,3 +169,7 @@ plots:
     share_ylim: null                # signed shares; refilling is negative, root share can exceed 100%
     daily_ylim: null
     show_sum: true                  # thin black line: sum of shares, 100% when the water balance closes
+
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261002_1614', created: '2026-10-02T16:14:18', git_commit: 575315ecf3b70106cf25f406f52dcdeab94eb047,
+  git_dirty: true}

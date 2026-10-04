@@ -75,9 +75,19 @@ Every batch saves **all** model output variables per timestep (see `timeseries/*
 - Low: `pi0_leaf` = -1.1, `pi0_stem` = -0.9
 - Med (baseline): `pi0_leaf` = -1.4, `pi0_stem` = -1.1
 - High: `pi0_leaf` = -1.7, `pi0_stem` = -1.3
-- Scenario: Drydown (S2) by default; set `active_scenarios` in the config. S2 starts both compartments at `s_init` = 0.32 and dries both after burn-in. Starting from 0.45 with 1 m compartments barely dries the soil in 15 days, and below about 0.29 transpiration sits at its floor from day 0 (below 0.26 the leaf water potential solver fails)
+- Scenario: Drydown (S2) by default; set `active_scenarios` in the config. S2 starts both compartments at `s_init` = 0.42 and dries both after burn-in. Compartment depths are the species rooting depth (`zr_arr: species`, 0.2 m for Pecan), so soil-root conductance and the soil water balance use the same depth. With 0.2 m compartments s falls from 0.42 to about 0.255 over 15 days; transpiration declines from about day 3 and reaches its cuticular floor on days 11-13, so the pi0 runs stay separate for most of the window (starting from 0.32 they merged by day 8; s_init sweep 0.32-0.45). (Earlier 1 m runs: starting from 0.45 barely dried the soil, and starting below about 0.29 put transpiration at its floor from day 0; starting below 0.26 made the leaf water potential solver fail)
 - Simulation: 7-day burn-in plus 15-day analysis window (weather is `Lab_Weather_Summer_Average_Day_30min.xlsx`: the time-of-day mean of the lab record, repeated for 45 days)
-- Figures: 15-day time series of transpiration, root uptake, storage fluxes and psi_l
+- Figures: 15-day time series of transpiration, root uptake, soil water potential, storage fluxes, psi_l and flux partition (share of E from roots, stem and leaf storage)
+- Final batch: `20261002_1614` (after the gp lag fix in `hydraulics.py`)
+
+#### Phase 1 diagnostics
+Scripts used to choose the S2 drydown and explain the model behaviour. They are stowed for the record, not part of the standard workflow. Each script's docstring states the conditions it ran under; outputs are written next to the script. Both s_init sweeps and the diagnostics below ran before the gp lag fix, so their E values are somewhat inflated (most for the high run).
+- `diagnostics/s_init_sweep/round1_zr1m/`: 1 m compartments. `drydown_sweep.py` (med run, s_init 0.30-0.23) and `drydown_pick.py` (all runs, 0.32/0.30/0.29), which led to s_init 0.32.
+- `diagnostics/s_init_sweep/round2_zr02m/`: 0.2 m compartments. `run_sweep.py` (all runs, s_init 0.34-0.45; CSVs gitignored) and `summarize_sweep.py` (table and comparison figure), which led to s_init 0.42.
+- `diagnostics/root_conductance/`: soil-root conductance vs soil water, the psi_l collapse at s_init 0.23, and the s = 0.45 vs 0.32 day-1 comparison.
+- `diagnostics/night_psi_l/`: why night psi_l stays far below psi_s once the soil dries (stem storage sets it).
+- `diagnostics/checks/`: quick checks (compartment depths, batch summary, plot ranges).
+- `extra_plots/flux_partition/`: daily supply shares and prototype flux-partition figures (the plot itself is now `flux_partition` in `post_processing.py`).
 
 Candidate parameters for later phases: storage volumes (`VWT`, `VWTLEAF`), storage conductances (`GWMAX`, `GWMAXLEAF`), elastic moduli (`eta_stem`, `eta_leaf`), and salinity settings (`cs_init`, `E`, `dynamic_E`).
 
@@ -94,7 +104,7 @@ python SensitivityAnalysis/post_processing.py "SensitivityAnalysis/Phase 1 - pi0
 - `post_processing.py` has one function per figure type. It reads the `plots` section of the **current** config, so axis limits and labels can be changed and figures re-made without re-running the model.
 
 ### Phase config sections
-- `simulation`: species, weather file, timestep, burn-in and analysis days, `gwmax_mode`
+- `simulation`: species, weather file, timestep, burn-in and analysis days, compartment depths (`zr_arr`: a list in m, or `species` for the species rooting depth in every compartment), `gwmax_mode`
 - `baseline`: every model parameter, with source comments
 - `scenarios` and `active_scenarios`
 - `runs`: named overrides of baseline values (add rows for more combinations)
@@ -111,6 +121,8 @@ SensitivityAnalysis/
         manifest.csv        one row per run x scenario, with each run's overrides
         timeseries/         <run>__<scenario>.csv, all output variables
         figures/<scenario>/ transpiration, root_uptake, storage_fluxes, psi_l
+    diagnostics/            optional: scripts used to tune or explain the phase (tracked)
+    extra_plots/            optional: scripts for figures beyond post_processing.py (tracked)
 ```
 Only the frozen `config.yaml` in each batch is tracked; results and figures are gitignored.
 

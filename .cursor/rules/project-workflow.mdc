@@ -13,7 +13,8 @@ alwaysApply: true
   - sensitivity_analysis.py runs a Phase config; post_processing.py makes figures
   - SensitivityAnalysisPlan.md describes the phases
   - "Phase N - name/" folders hold config.yaml and results/<batch_id>/
-    (only each batch's frozen config.yaml is tracked)
+    (only each batch's frozen config.yaml is tracked); they may also hold
+    diagnostics/ and extra_plots/ scripts used to tune or explain the phase
 - data/: weather_data/, soil_data/, sap_flux/, literature_data/ inputs and helper notebooks
 - Notebooks: *_vN.ipynb (latest version is active); Archive/ holds legacy code
 - output/ is generated and gitignored

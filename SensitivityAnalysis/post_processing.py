@@ -245,6 +245,119 @@ def plot_psi_l(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
     )
 
 
+def _shade(ax: plt.Axes, x: np.ndarray, mask: np.ndarray) -> None:
+    """Grey spans where ``mask`` is True (contiguous runs of timesteps)."""
+    dt = np.median(np.diff(x))
+    edges = np.flatnonzero(np.diff(np.r_[0, mask.astype(int), 0]))
+    for a, b in zip(edges[::2], edges[1::2]):
+        ax.axvspan(x[a] - dt / 2, x[b - 1] + dt / 2, color="0.9", lw=0, zorder=0)
+
+
+def plot_flux_partition(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                        plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: transpiration supply partition, one column per run; one figure per scenario.
+
+    Rows: (1) absolute fluxes: E, root uptake (sum of qs over compartments), qw_stem
+    and qw_leaf; (2) per-timestep signed shares of E (positive = supplies E,
+    negative = storage refilling, so the root share can exceed 100%), nights
+    shaded; (3) daily totals of each flux as % of daily E. A thin black line in
+    rows 2-3 is the sum of the shares, a check that the water balance closes (100%).
+
+    Optional ``plot_cfg`` keys: ``ylabels`` (one per row), ``flux_ylim``,
+    ``share_ylim``, ``daily_ylim``, ``component_colors`` and ``component_labels``
+    (keys root, stem, leaf), ``show_sum``.
+    """
+    rows = manifest[manifest["scenario"] == scenario]
+    display_names = common.get("display_names", {})
+    run_colors = common.get("run_colors", {})
+    linewidth = float(common.get("linewidth", 1.2))
+    legend_cfg = {**common.get("legend", {}), **plot_cfg.get("legend", {})}
+    comp_colors = {"root": "#8c6d31", "stem": "#31a354", "leaf": "#a1d99b", **plot_cfg.get("component_colors", {})}
+    comp_labels = {"root": "Root uptake $\\Sigma q_s$", "stem": "Stem storage $q_{w,stem}$",
+                   "leaf": "Leaf storage $q_{w,leaf}$", **plot_cfg.get("component_labels", {})}
+    ylabels = plot_cfg.get("ylabels") or ["Flux ($\\mu$m s$^{-1}$)", "Share of $E$ per step (%)", "Share of daily $E$ (%)"]
+    show_sum = plot_cfg.get("show_sum", True)
+
+    width, height = common.get("figsize", [8, 3.5])
+    fig, axes = plt.subplots(3, len(rows), figsize=(0.75 * width * len(rows), 0.8 * height * 3),
+                             sharex="col", squeeze=False)
+
+    for j, row in enumerate(rows.itertuples()):
+        df = _window(series[(row.run, scenario)], common.get("window_days"))
+        x = df["days_since_burn_in"].to_numpy()
+        ev = df["ev"].to_numpy(dtype=float)
+        n_comp = len(json.loads(df["qs"].iloc[0]))
+        flux = {
+            "root": sum(_values(df, "qs", c) for c in range(1, n_comp + 1)),
+            "stem": df["qw_stem"].to_numpy(dtype=float),
+            "leaf": df["qw_leaf"].to_numpy(dtype=float),
+        }
+
+        ax = axes[0, j]
+        ax.plot(x, ev, color="k", lw=linewidth, label="Transpiration $E$")
+        for k, q in flux.items():
+            ax.plot(x, q, color=comp_colors[k], lw=linewidth, label=comp_labels[k])
+        ax.axhline(0, color="0.5", lw=0.6)
+        if plot_cfg.get("flux_ylim"):
+            ax.set_ylim(plot_cfg["flux_ylim"])
+        ax.set_title(run_label(row.overrides, display_names), fontsize="medium", color=run_colors.get(row.run, "k"))
+
+        ax = axes[1, j]
+        share = {k: 100 * q / ev for k, q in flux.items()}
+        pos_base, neg_base = np.zeros_like(ev), np.zeros_like(ev)
+        for k, sh in share.items():
+            pos, neg = np.clip(sh, 0, None), np.clip(sh, None, 0)
+            ax.fill_between(x, pos_base, pos_base + pos, color=comp_colors[k], lw=0, step="mid", label=comp_labels[k])
+            ax.fill_between(x, neg_base, neg_base + neg, color=comp_colors[k], lw=0, step="mid")
+            pos_base, neg_base = pos_base + pos, neg_base + neg
+        if show_sum:
+            ax.plot(x, sum(share.values()), color="k", lw=0.6, label="Sum of shares")
+        ax.axhline(100, color="k", lw=0.6, ls=":")
+        ax.axhline(0, color="0.5", lw=0.6)
+        _shade(ax, x, df["forcing_phi"].to_numpy(dtype=float) <= 0)
+        if plot_cfg.get("share_ylim"):
+            ax.set_ylim(plot_cfg["share_ylim"])
+
+        ax = axes[2, j]
+        dt = np.median(np.diff(x))
+        day_idx = np.floor(x - dt / 2 + 1e-9).astype(int)
+        days, counts = np.unique(day_idx, return_counts=True)
+        days = days[counts == counts.max()]
+        e_day = np.array([ev[day_idx == d].sum() for d in days])
+        pos_base, neg_base, total = np.zeros(len(days)), np.zeros(len(days)), np.zeros(len(days))
+        for k, q in flux.items():
+            sh = 100 * np.array([q[day_idx == d].sum() for d in days]) / e_day
+            pos, neg = np.clip(sh, 0, None), np.clip(sh, None, 0)
+            ax.bar(days + 0.5, pos, bottom=pos_base, width=0.8, color=comp_colors[k])
+            ax.bar(days + 0.5, neg, bottom=neg_base, width=0.8, color=comp_colors[k])
+            pos_base, neg_base, total = pos_base + pos, neg_base + neg, total + sh
+        if show_sum:
+            ax.plot(days + 0.5, total, "k.-", lw=0.6, ms=3)
+        ax.set_ylim(plot_cfg.get("daily_ylim") or [min(neg_base.min(), 0) - 10, max(pos_base.max(), total.max()) + 10])
+        ax.axhline(100, color="k", lw=0.6, ls=":")
+        ax.axhline(0, color="0.5", lw=0.6)
+
+    for r, label in enumerate(ylabels):
+        axes[r, 0].set_ylabel(label)
+    for ax in axes[-1]:
+        ax.set_xlabel(common.get("xlabel", "Days"))
+        if common.get("window_days") is not None:
+            ax.set_xlim(common["window_days"])
+    legend_kw = dict(loc=legend_cfg.get("loc", "upper left"), bbox_to_anchor=legend_cfg.get("bbox_to_anchor", [1.01, 1.0]),
+                     fontsize=legend_cfg.get("fontsize", "small"), frameon=legend_cfg.get("frameon", False))
+    axes[0, -1].legend(**legend_kw)
+    handles, labels = axes[1, -1].get_legend_handles_labels()
+    axes[1, -1].legend(handles + [plt.Rectangle((0, 0), 1, 1, color="0.9")], labels + ["Night"], **legend_kw)
+    fig.suptitle(f"{plot_cfg.get('title', '')} ({rows['scenario_label'].iloc[0]})")
+    fig.tight_layout()
+
+    out_path = out_dir / f"flux_partition.{common.get('format', 'png')}"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=common.get("dpi", 300), bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
 # Config ``plots`` key -> plotting function.
 PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "transpiration": plot_transpiration,
@@ -252,6 +365,7 @@ PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "soil_water_potential": plot_soil_water_potential,
     "storage_fluxes": plot_storage_fluxes,
     "psi_l": plot_psi_l,
+    "flux_partition": plot_flux_partition,
 }
 
 

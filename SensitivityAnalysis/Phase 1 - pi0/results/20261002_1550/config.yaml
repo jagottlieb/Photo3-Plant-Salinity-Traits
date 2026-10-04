@@ -71,8 +71,7 @@ scenarios:
     post_burn_soil_dynamics: [constant, constant]
   S2:
     label: Drydown
-    s_init: [0.42, 0.42]                # with 0.2 m compartments: total soil-root conductance ~1.1 (~18x gp*LAI ~0.06) at start, psi_s ~-0.01 MPa;
-                                        # it falls below gp*LAI near s ~0.32 (day ~5) and to ~0.002 by day 15 (s ~0.255), giving a gradual 15-day decline
+    s_init: [0.32, 0.32]                # pre-stressed; soil-root conductance ~ plant conductance here while psi_s is still ~-0.02 MPa
     cs_init: [0.0, 0.0]
     post_burn_cs: [0.0, 0.0]
     post_burn_soil_dynamics: [drydown, drydown]
@@ -131,7 +130,7 @@ plots:
     panel_titles: ["Compartment 1", "Compartment 2"]
     scale: 1.0
     ylabel: "Root water uptake, $q_s$ ($\\mu$m s$^{-1}$)"
-    ylim: [0, 0.045]                # shared by both compartment panels
+    ylim: [0, 0.05]                 # shared by both compartment panels
     title: "Root water uptake"
 
   soil_water_potential:
@@ -141,7 +140,7 @@ plots:
     panel_titles: ["Compartment 1", "Compartment 2"]
     scale: 1.0
     ylabel: "Soil water potential, $\\psi_s$ (MPa)"
-    ylim: [-0.07, 0]                # shared by both compartment panels
+    ylim: [-0.04, 0]                # shared by both compartment panels
     title: "Soil water potential"
 
   storage_fluxes:
@@ -161,11 +160,6 @@ plots:
     ylim: null
     title: "Leaf water potential"
 
-  flux_partition:                   # one column per run; rows: fluxes, share of E per step, share of daily E
-    enabled: true
-    title: "Transpiration supply partition"
-    ylabels: ["Flux ($\\mu$m s$^{-1}$)", "Share of $E$ per step (%)", "Share of daily $E$ (%)"]
-    flux_ylim: null                 # [min, max] or null for auto
-    share_ylim: null                # signed shares; refilling is negative, root share can exceed 100%
-    daily_ylim: null
-    show_sum: true                  # thin black line: sum of shares, 100% when the water balance closes
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261002_1550', created: '2026-10-02T15:50:28', git_commit: 575315ecf3b70106cf25f406f52dcdeab94eb047,
+  git_dirty: true}
