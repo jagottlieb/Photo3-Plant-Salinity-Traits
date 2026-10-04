@@ -821,6 +821,7 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		)
 		self.psi_l = self.out.x[0]
 		self.tl = self.out.x[1]
+		self.gp = self.gpf(self.psi_l)
 		self.ev = self.evf(photo, atm.phi, atm.ta, self.psi_l, atm.qa, self.tl, photo.cm, self.lai, 1.)
 
 	def _psi_wf_bartlett(self, vw, VWT, pi_0, wft, wr, eta, mcap, psi_0=0):
@@ -1030,6 +1031,8 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 
 	def fBal(self, params, soil, photo, phi, ta, qa, c1, s_arr, lai, gp, ared, zr, root_frac_arr, B, cs_arr, dt):
 		psi_l, tl = params
+		# gp must match the psi_l being solved for, or the reported fluxes in update() do not close.
+		gp = self.gpf(psi_l)
 		evf_val = self.evf(photo, phi, ta, psi_l, qa, tl, c1, lai, ared)
 
 		psi_s_arr = soil.psi_s(soil.s, soil.cs)
