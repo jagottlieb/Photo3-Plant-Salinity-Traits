@@ -19,6 +19,7 @@ simulation:
   burn_in_days: 7                     # soil held constant, no salt uptake
   analysis_days: 15                   # window after burn-in; total = 22 days
   zr_arr: species                     # compartment depths (m); "species" = species ZR per compartment, or a list
+  soil_texture: SandyLoam             # class name in soil.py (e.g. Berger, SandyLoam, Loam)
   psi_wf_mode: bartlett               # storage psi_w formulation (stem and leaf)
   gwmax_mode: equation                # equation: GWMAX from VWT and species CAP; manual: use baseline.GWMAX_manual
   enable_post_burn_cs_reset: true     # apply scenario post_burn_cs at end of burn-in
@@ -71,8 +72,8 @@ scenarios:
     post_burn_soil_dynamics: [constant, constant]
   S2:
     label: Drydown
-    s_init: [0.42, 0.42]                # with 0.2 m compartments: total soil-root conductance ~1.1 (~18x gp*LAI ~0.06) at start, psi_s ~-0.01 MPa;
-                                        # it falls below gp*LAI near s ~0.32 (day ~5) and to ~0.002 by day 15 (s ~0.255), giving a gradual 15-day decline
+    s_init: [0.42, 0.42]                # SandyLoam, 0.2 m compartments: total soil-root conductance ~1.9 (~1.3x gp*LAI ~1.45) at start, psi_s ~-0.05 MPa;
+                                        # it falls below gp*LAI near s ~0.39 (psi_s ~-0.075 MPa), so drought stress begins soon after burn-in
     cs_init: [0.0, 0.0]
     post_burn_cs: [0.0, 0.0]
     post_burn_soil_dynamics: [drydown, drydown]
@@ -131,7 +132,7 @@ plots:
     panel_titles: ["Compartment 1", "Compartment 2"]
     scale: 1.0
     ylabel: "Root water uptake, $q_s$ ($\\mu$m s$^{-1}$)"
-    ylim: [0, 0.045]                # shared by both compartment panels
+    ylim: null                      # shared by both compartment panels
     title: "Root water uptake"
 
   soil_water_potential:
@@ -141,7 +142,7 @@ plots:
     panel_titles: ["Compartment 1", "Compartment 2"]
     scale: 1.0
     ylabel: "Soil water potential, $\\psi_s$ (MPa)"
-    ylim: [-0.07, 0]                # shared by both compartment panels
+    ylim: null                      # shared by both compartment panels
     title: "Soil water potential"
 
   storage_fluxes:

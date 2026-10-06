@@ -37,7 +37,8 @@ import hydraulics
 import species_traits
 from defs import Atmosphere, SimulationMultiComp, steps
 from photosynthesis import C3_c_leaf_reduc
-from soil import Berger, ConstantSoil, DrydownSoil, SaltySoilMultiple
+import soil
+from soil import ConstantSoil, DrydownSoil, SaltySoilMultiple
 
 # Scenario keys that are not model parameters (everything else must exist in baseline).
 SCENARIO_ONLY_KEYS = {"label", "post_burn_cs", "post_burn_soil_dynamics"}
@@ -274,7 +275,7 @@ def build_model(params: Dict[str, Any], sim_cfg: Dict[str, Any], weather: Dict[s
 
     atmosphere_obj = Atmosphere(weather["phi"][0], weather["ta"][0], weather["qa"][0])
     soil_obj = SaltySoilMultiple(
-        stype=Berger(),
+        stype=getattr(soil, sim_cfg.get("soil_texture", "Berger"))(),
         dynamics=DrydownSoil(),
         zr=zr_arr,
         s=np.array(params["s_init"], dtype=float),
