@@ -713,11 +713,13 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		F_CAP=0.5,
 		dynamic_E=False,
 		c_stem_max=None,
+		kr=1e-8,
 	):
 		Hydro.__init__(self, species, gcut=gcut)
 		self.E = E
 		self.F_CAP = F_CAP
 		self.dynamic_E = dynamic_E
+		self.kr = kr  # root radial permeability (m/s), used in gsr
 		# c_stem_max uses the same concentration basis as c_stem: mol/m3 on a ground area basis.
 		self.c_stem_max = c_stem_max
 		# Stem storage parameters
@@ -752,9 +754,9 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 			self.c_leaf = c_leaf
 		# c_leaf is tracked as concentration in storage water, mol/m3 on a ground area basis.
 
-		# Salt masses
-		self.MW_stem = self.c_stem * self.vw_stem * self.la
-		self.MW_leaf = self.c_leaf * self.vw_leaf * self.la
+		# Salt masses (mol/m2 ground): vw is per m2 leaf, so scale by lai to match the c updates in update().
+		self.MW_stem = self.c_stem * self.vw_stem * self.lai
+		self.MW_leaf = self.c_leaf * self.vw_leaf * self.lai
 
 		self.dt = dt
 		self.Salt_Uptake = salt_uptake
@@ -927,15 +929,12 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		"""Leaf storage flux on a ground area basis (um/s)."""
 		return (vw_leaf - self.vwf_leaf(vw_leaf, psi_l, dt)) * lai * 10.**6 / dt
 
-	def psi_x(self, ev, psi_l, gp, lai, gw_leaf=None, psi_w_leaf=None):
-		"""Xylem node water potential including leaf storage coupling (MPa)."""
-		# Requested updated form including leaf storage coupling.
+	def psi_x(self, ev, psi_l, gp, lai, qw_leaf=None):
+		"""Xylem node water potential from leaf node closure, qxl + qw_leaf = E (MPa)."""
 		gp_safe = max(gp, 1e-10)
-		if gw_leaf is None:
-			gw_leaf = self.gwf_leaf(self.psi_wf_leaf(self.vw_leaf))
-		if psi_w_leaf is None:
-			psi_w_leaf = self.psi_wf_leaf(self.vw_leaf)
-		return ev * (1 - self.F_CAP) / (lai * gp_safe) + psi_l - gw_leaf * (psi_w_leaf - psi_l)
+		if qw_leaf is None:
+			qw_leaf = self.qwf_leaf(self.vw_leaf, psi_l, lai, self.dt)
+		return psi_l + (1 - self.F_CAP) * (ev - qw_leaf) / (lai * gp_safe)
 
 	def a(self, soil, s_arr, zr, psi_s_arr, B, root_frac_arr):
 		"""Aggregate soil-driven term for basal node solve (um/s)."""
@@ -947,9 +946,9 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		gsr_vals = self.gsr(soil, s_arr, zr, B, root_frac_arr)
 		return np.sum(gsr_vals)
 
-	def psi_b(self, soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai, ev, gw_leaf, psi_w_leaf):
+	def psi_b(self, soil, s_arr, zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai, ev, qw_leaf):
 		"""Root-base interface potential enforcing flux closure (MPa)."""
-		psi_x_val = self.psi_x(ev, psi_l, gp, lai, gw_leaf=gw_leaf, psi_w_leaf=psi_w_leaf)
+		psi_x_val = self.psi_x(ev, psi_l, gp, lai, qw_leaf=qw_leaf)
 		a_val = self.a(soil, s_arr, zr, psi_s_arr, B, root_frac_arr)
 		d_val = self.d(soil, s_arr, zr, B, root_frac_arr)
 		gp_term = gp * lai / self.F_CAP
@@ -975,7 +974,7 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 	def gsr(self, soil, s_arr, zr, B, root_frac_arr):
 		"""Soil-root conductance by compartment (um/(s-MPa))."""
 		rr = 0.2 * 10 ** -3
-		kr = 10 ** -8
+		kr = self.kr
 		gsr_list = []
 		for s, root_frac in zip(s_arr, root_frac_arr):
 			B_val = B * root_frac
@@ -1043,13 +1042,12 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		psi_w_osm_leaf, psi_w_turgor_leaf = self.psi_components_leaf(self.vw_leaf)
 		gw_leaf = self.gwf_leaf(psi_w_leaf)
 
-		psi_x_val = self.psi_x(evf_val, psi_l, gp, lai, gw_leaf=gw_leaf, psi_w_leaf=psi_w_leaf)
-		psi_b_val = self.psi_b(soil, soil.s, self.zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai, evf_val, gw_leaf, psi_w_leaf)
-		qbx_val = self.qbx(gp, psi_x_val, psi_b_val, lai)
-
 		# Stem and leaf storage fluxes from vwf-style storage updates.
-		qwf_stem = self.qwf_stem(self.vw_stem, evf_val, gp, psi_l, lai, dt, psi_x=psi_x_val)
 		qwf_leaf = self.qwf_leaf(self.vw_leaf, psi_l, lai, dt)
+		psi_x_val = self.psi_x(evf_val, psi_l, gp, lai, qw_leaf=qwf_leaf)
+		psi_b_val = self.psi_b(soil, soil.s, self.zr, psi_l, psi_s_arr, B, root_frac_arr, gp, lai, evf_val, qwf_leaf)
+		qbx_val = self.qbx(gp, psi_x_val, psi_b_val, lai)
+		qwf_stem = self.qwf_stem(self.vw_stem, evf_val, gp, psi_l, lai, dt, psi_x=psi_x_val)
 
 		energy_balance = (
 			phi * lai
@@ -1085,14 +1083,14 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		gw_leaf = self.gwf_leaf(psi_w_leaf)
 
 		psi_s_arr = soil.psi_s(soil.s, soil.cs)
-		psi_x_val = self.psi_x(self.ev, self.psi_l, self.gp, self.lai, gw_leaf=gw_leaf, psi_w_leaf=psi_w_leaf)
-		psi_b_val = self.psi_b(soil, soil.s, self.zr, self.psi_l, psi_s_arr, B, root_frac_arr, self.gp, self.lai, self.ev, gw_leaf, psi_w_leaf)
+		self.qw_leaf = self.qwf_leaf(self.vw_leaf, self.psi_l, self.lai, dt)
+		psi_x_val = self.psi_x(self.ev, self.psi_l, self.gp, self.lai, qw_leaf=self.qw_leaf)
+		psi_b_val = self.psi_b(soil, soil.s, self.zr, self.psi_l, psi_s_arr, B, root_frac_arr, self.gp, self.lai, self.ev, self.qw_leaf)
 		self.qs = self.qsf(soil, soil.s, self.zr, psi_s_arr, psi_b_val, B, root_frac_arr)
 		self.qbxf = self.qbx(self.gp, psi_x_val, psi_b_val, self.lai)
 		self.qxlf = self.qxl(self.gp, psi_x_val, self.psi_l, self.lai)
 
 		self.qw_stem = self.qwf_stem(self.vw_stem, self.ev, self.gp, self.psi_l, self.lai, dt, psi_x=psi_x_val)
-		self.qw_leaf = self.qwf_leaf(self.vw_leaf, self.psi_l, self.lai, dt)
 
 		# Storage state updates
 		self.vw_stem = min(max(self.vwf_stem(self.vw_stem, self.ev, self.gp, self.psi_l, self.lai, dt, psi_x=psi_x_val), 1e-12), self.VWTSTEM)

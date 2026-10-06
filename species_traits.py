@@ -118,18 +118,20 @@ class Pecan(object): #Pecan tree ()
 	PTYPE = C3
 
 	ZR = 0.2  # rooting depth (m) - Rounded average of lab plants in June 2026
-	LAI = 17  # leaf area index (m2/m2) - average of lab plants in June 2026
-	#
+	LAI = 8.5  # leaf area index (m2/m2) - average of lab plants in June 2026
+	LA = 0.36  # leaf area (m2) average canopy areafrom lab plants in June 2026
 	GCUT = 4.6 * (0.1/4.1)  # Minimum leaf conductance from plot by Rieger and Daniell, 1988 (mmol/m2/s) converted to mm/s using (0.1 mm/s / 4.1 mmol/m2/s) conversion factor from Kerstiens (1996)
 	GA = 185  # atmospheric conductance (mm/s) - Duncan reports a wind speed of 0.1-3 m/s. THe's using a ga of 0.05 
 	RAIW = 14.3256  # Woodroof (1934), well-watered root area index (m2/m2)
 
 	# Maximum xylem conductance per unit leaf area (um/MPa/s)
-	# Based on Steinberg et al. conversion and scaled by average lab plant measurements.
-	GPMAX = (1000 * 8 * 10**-5) * (3900 / ((79 / 4) ** 2) * np.pi) * (((14.6 / 4) ** 2) * np.pi / 1010) / LAI
-
+	# a) Based on Steinberg et al. conversion and scaled by average lab plant measurements.
+	# GPMAX = (1000 * 8 * 10**-5) * (3900 / (((79 / 4) ** 2) * np.pi)) * (((14.6 / 4) ** 2) * np.pi / 1010) / LA
+	# b) Based on stem specific conductivity from Lv et al (2025) for Ring porous trees
+	GPMAX = 0.17
+	
 	# Conductance/storage parameters
-	VWT =  0.011 #0.0043 #.036 #0.0043 #0.036  # max stem water storage (m3/m2 leaf area); see assumptions in storage_volume_calcs notebook
+	VWT =  0.0002 # max stem water storage (m3/m2 leaf area); see assumptions in storage_volume_calcs notebook
 	VWTLEAF = 0.00005  # max leaf water storage (m3/m2 leaf area) # From american beech
 	# max conductance between storage water and xylem (um/MPa/s)
 	# 0.054 is maximum stem capacitance from Zieminska (2020) in MPA. 
@@ -138,9 +140,7 @@ class Pecan(object): #Pecan tree ()
 	GWMAX = CAP * VWT *10**6/ (0.63 * 4 * 60 * 60) # stem storage-to-xylem conductance, um/(MPa s); high but plausible per sap-flux timescale
 	#GWMAXLEAF = 0.001 # leaf storage-to-xylem conductance, um/(MPa s); rough estimate targeting faster turnover than stem storage
 	GWMAXLEAF = 0.0005  # Value from American Beech, um/(MPa s)
-	
 
-	LA = 0.008  # leaf area (m2)
 
 	RD0 = 3.01  # Standard dark respiration at 25 C (umol/(m^2s))
 	HAV = 62000.  # Activation energy for Vc,max (J/mol)
