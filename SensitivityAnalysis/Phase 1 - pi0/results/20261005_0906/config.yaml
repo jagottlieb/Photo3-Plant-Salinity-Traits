@@ -17,9 +17,8 @@ simulation:
   weather_file: data/weather_data/lab_weather_data/Lab_Weather_Summer_Average_Day_30min.xlsx   # average summer day repeated for 45 days at 30 min
   timestepM: 30                       # model timestep (min)
   burn_in_days: 7                     # soil held constant, no salt uptake
-  analysis_days: 5                    # window after burn-in; total = 12 days
+  analysis_days: 15                   # window after burn-in; total = 22 days
   zr_arr: species                     # compartment depths (m); "species" = species ZR per compartment, or a list
-  soil_texture: SandyLoam             # class name in soil.py (e.g. Berger, SandyLoam, Loam)
   psi_wf_mode: bartlett               # storage psi_w formulation (stem and leaf)
   gwmax_mode: equation                # equation: GWMAX from VWT and species CAP; manual: use baseline.GWMAX_manual
   enable_post_burn_cs_reset: true     # apply scenario post_burn_cs at end of burn-in
@@ -35,8 +34,8 @@ baseline:
   vwi_stem: 0.85          # initial storage fraction (-)
   c_stem: 5.0             # initial storage salt concentration (mol/m3)
   c_stem_max: null        # cap for dynamic E; null uses max soil cs
-  VWT: 0.0002             # max stem storage (m3/m2 leaf); 1 cm x 1.5 m cylinder x Vt 0.61 (WD 0.60) / 3600 cm2 leaf
-  GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s)); equation gives ~0.0041
+  VWT: 0.011              # max stem storage (m3/m2 leaf); Pecan value
+  GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s)); equation gives ~0.224
 
   # Leaf storage
   pi0_leaf: -1.4          # osmotic potential at full turgor (MPa)
@@ -55,7 +54,6 @@ baseline:
   root_frac: [0.5, 0.5]   # root fraction per compartment (-)
   B_param: 10000          # root length density parameter
   F_CAP: 0.5              # relative position of the stem storage node along the hydraulic path (-)
-  gpmax_scale: 1.0        # multiplies species GPMAX (1.0 = species value)
 
   # Salt and conductance
   salt_uptake: false
@@ -73,8 +71,8 @@ scenarios:
     post_burn_soil_dynamics: [constant, constant]
   S2:
     label: Drydown
-    s_init: [0.42, 0.42]                # SandyLoam, 0.2 m compartments: total soil-root conductance ~1.9 (~1.3x gp*LAI ~1.45) at start, psi_s ~-0.05 MPa;
-                                        # it falls below gp*LAI near s ~0.39 (psi_s ~-0.075 MPa), so drought stress begins soon after burn-in
+    s_init: [0.42, 0.42]                # with 0.2 m compartments: total soil-root conductance ~1.1 (~18x gp*LAI ~0.06) at start, psi_s ~-0.01 MPa;
+                                        # it falls below gp*LAI near s ~0.32 (day ~5) and to ~0.002 by day 15 (s ~0.255), giving a gradual 15-day decline
     cs_init: [0.0, 0.0]
     post_burn_cs: [0.0, 0.0]
     post_burn_soil_dynamics: [drydown, drydown]
@@ -100,7 +98,7 @@ runs:
 # ylim: null for auto, [min, max] for all panels, or a list of [min, max] per panel.
 plots:
   common:
-    window_days: [0, 5]
+    window_days: [0, 15]
     figsize: [8, 3.5]               # width, height per panel (in)
     dpi: 300
     format: png
@@ -133,7 +131,7 @@ plots:
     panel_titles: ["Compartment 1", "Compartment 2"]
     scale: 1.0
     ylabel: "Root water uptake, $q_s$ ($\\mu$m s$^{-1}$)"
-    ylim: null                      # shared by both compartment panels
+    ylim: [0, 0.045]                # shared by both compartment panels
     title: "Root water uptake"
 
   soil_water_potential:
@@ -143,7 +141,7 @@ plots:
     panel_titles: ["Compartment 1", "Compartment 2"]
     scale: 1.0
     ylabel: "Soil water potential, $\\psi_s$ (MPa)"
-    ylim: null                      # shared by both compartment panels
+    ylim: [-0.07, 0]                # shared by both compartment panels
     title: "Soil water potential"
 
   storage_fluxes:
@@ -172,24 +170,6 @@ plots:
     daily_ylim: null
     show_sum: true                  # thin black line: sum of shares, 100% when the water balance closes
 
-  daily_transpiration:              # daily total E, one bar per run (run_colors) side by side for each day
-    enabled: true
-    title: "Daily transpiration"
-    xlabel: "Day"
-    ylabel: "Daily transpiration (mm)"
-    ylim: null
-
-  daily_storage:                    # daily stem + leaf storage discharge (above zero) and refill (below zero), one bar pair per run
-    enabled: true
-    title: "Daily storage discharge and refill"
-    xlabel: "Day"
-    ylabel: "Daily storage flux (mm)"
-    ylim: null
-
-  daily_storage_table:              # LaTeX table (figures/<scenario>/daily_storage_table.tex) matching daily_storage
-    enabled: true
-    days: [1, 5]                    # 1-based days since end of burn-in
-    day_labels: {1: "1 (well watered)", 5: "5 (water stressed)"}
-    column_names: {low: Low, med: Medium, high: High}
-    caption: "Daily stem and leaf storage discharge and refill (mm) for the drydown scenarios"
-    label: "tab:pi0_daily_storage"
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261005_0906', created: '2026-10-05T09:06:27', git_commit: da20e7ff44cdba9a6558f4f7c2b41bceccc4aff2,
+  git_dirty: true}

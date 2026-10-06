@@ -111,16 +111,32 @@ def _panel_ylim(ylim: Any, panel_index: int) -> Optional[List[float]]:
     return ylim
 
 
-def _plot_timeseries(
+def _suptitle(plot_cfg: Dict[str, Any], rows: pd.DataFrame) -> str:
+    """Figure title: the block's ``title``, then scenario label and run group (if any)."""
+    context = [str(rows["scenario_label"].iloc[0])]
+    if "group" in rows.columns and pd.notna(rows["group"].iloc[0]):
+        context.append(str(rows["group"].iloc[0]))
+    return f"{plot_cfg.get('title', '')} ({', '.join(context)})"
+
+
+def _save(fig: plt.Figure, out_path: Path, common: Dict[str, Any]) -> Path:
+    """Tight-layout, save and close ``fig``."""
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=common.get("dpi", 300), bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+def _draw_timeseries(
     manifest: pd.DataFrame,
     series: SeriesDict,
     scenario: str,
     plot_cfg: Dict[str, Any],
     common: Dict[str, Any],
-    out_path: Path,
     panels: List[Dict[str, Any]],
-) -> Path:
-    """Shared helper: stacked panels with one line per run, saved to ``out_path``.
+) -> Tuple[plt.Figure, np.ndarray, pd.DataFrame]:
+    """Shared helper: stacked panels with one line per run.
 
     Args:
         manifest: Batch manifest (``overrides`` gives the legend entries).
@@ -128,17 +144,17 @@ def _plot_timeseries(
         scenario: Scenario to plot.
         plot_cfg: The figure's block from the config ``plots`` section.
         common: The config ``plots.common`` block.
-        out_path: File to write.
         panels: One dict per panel with ``variable``, optional ``compartment``
-            (1-based, for per-compartment pairs) and optional ``title``.
+            (1-based, for per-compartment pairs), and optional ``title``,
+            ``ylabel`` and ``scale`` (default to the block's ``ylabel``/``scale``).
 
     Returns:
-        Path of the saved figure.
+        ``(fig, axes, rows)``: the figure, its panel axes and the plotted manifest rows.
     """
     rows = manifest[manifest["scenario"] == scenario]
     display_names = common.get("display_names", {})
     colors = common.get("run_colors", {})
-    scale = float(plot_cfg.get("scale", 1.0))
+    linestyles = common.get("run_linestyles", {})
     linewidth = float(common.get("linewidth", 1.2))
     legend_cfg = {**common.get("legend", {}), **plot_cfg.get("legend", {})}
 
@@ -147,15 +163,16 @@ def _plot_timeseries(
     axes = axes[:, 0]
 
     for p, (ax, panel) in enumerate(zip(axes, panels)):
+        scale = float(panel.get("scale", plot_cfg.get("scale", 1.0)))
         for row in rows.itertuples():
             df = _window(series[(row.run, scenario)], common.get("window_days"))
             ax.plot(
                 df["days_since_burn_in"],
                 _values(df, panel["variable"], panel.get("compartment")) * scale,
-                color=colors.get(row.run), linewidth=linewidth,
+                color=colors.get(row.run), linestyle=linestyles.get(row.run, "-"), linewidth=linewidth,
                 label=run_label(row.overrides, display_names),
             )
-        ax.set_ylabel(plot_cfg.get("ylabel", panel["variable"]))
+        ax.set_ylabel(panel.get("ylabel", plot_cfg.get("ylabel", panel["variable"])))
         ylim = _panel_ylim(plot_cfg.get("ylim"), p)
         if ylim is not None:
             ax.set_ylim(ylim)
@@ -173,25 +190,36 @@ def _plot_timeseries(
     if common.get("window_days") is not None:
         axes[-1].set_xlim(common["window_days"])
     axes[-1].set_xlabel(common.get("xlabel", "Days"))
-    fig.suptitle(f"{plot_cfg.get('title', '')} ({rows['scenario_label'].iloc[0]})")
-    fig.tight_layout()
+    fig.suptitle(_suptitle(plot_cfg, rows))
+    return fig, axes, rows
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=common.get("dpi", 300), bbox_inches="tight")
-    plt.close(fig)
-    return out_path
+
+def _plot_timeseries(
+    manifest: pd.DataFrame,
+    series: SeriesDict,
+    scenario: str,
+    plot_cfg: Dict[str, Any],
+    common: Dict[str, Any],
+    out_path: Path,
+    panels: List[Dict[str, Any]],
+) -> Path:
+    """Stacked panels with one line per run (see :func:`_draw_timeseries`), saved to ``out_path``."""
+    fig, _, _ = _draw_timeseries(manifest, series, scenario, plot_cfg, common, panels)
+    return _save(fig, out_path, common)
 
 
 def _panels_from_config(plot_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Build panel specs from ``variables``/``compartments``/``panel_titles`` in a figure block."""
+    """Build panel specs from ``variables``/``compartments`` plus optional per-panel
+    ``panel_titles``, ``ylabels`` and ``scales`` lists in a figure block."""
     variables = plot_cfg["variables"]
     compartments = plot_cfg.get("compartments")
     if compartments:
         specs = [{"variable": variables[0], "compartment": c} for c in compartments]
     else:
         specs = [{"variable": v} for v in variables]
-    for spec, title in zip(specs, plot_cfg.get("panel_titles") or []):
-        spec["title"] = title
+    for key, list_key in (("title", "panel_titles"), ("ylabel", "ylabels"), ("scale", "scales")):
+        for spec, value in zip(specs, plot_cfg.get(list_key) or []):
+            spec[key] = value
     return specs
 
 
@@ -243,6 +271,65 @@ def plot_psi_l(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
         out_dir / f"psi_l.{common.get('format', 'png')}",
         panels=_panels_from_config(plot_cfg),
     )
+
+
+def plot_photosynthesis(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                        plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: photosynthesis and its salt reduction factor, one line per run; one figure per scenario.
+
+    Panels come from ``variables`` (default ``[a, photo_reduc]``). A dashed vertical
+    line in each run's colour marks the first step where ``onset_variable``
+    (default ``photo_reduc``) exceeds ``onset_threshold`` (default 0), i.e. when
+    the leaf-salt reduction function switches on. Runs that never switch on get
+    no line. Onset days are listed in the figure footnote.
+    """
+    plot_cfg = {"variables": ["a", "photo_reduc"], **plot_cfg}
+    fig, axes, rows = _draw_timeseries(manifest, series, scenario, plot_cfg, common, _panels_from_config(plot_cfg))
+    onset_var = plot_cfg.get("onset_variable", "photo_reduc")
+    onset_thr = float(plot_cfg.get("onset_threshold", 0.0))
+    colors = common.get("run_colors", {})
+
+    notes = []
+    for row in rows.itertuples():
+        df = _window(series[(row.run, scenario)], common.get("window_days"))
+        on = np.flatnonzero(_values(df, onset_var, None) > onset_thr)
+        if len(on) == 0:
+            notes.append(f"{row.run}: off")
+            continue
+        day = float(df["days_since_burn_in"].iloc[on[0]])
+        notes.append(f"{row.run}: day {day:.1f}")
+        for ax in axes:
+            ax.axvline(day, color=colors.get(row.run, "k"), ls="--", lw=0.8, zorder=0)
+    fig.text(0.01, -0.01, "Reduction onset: " + ", ".join(notes), fontsize="x-small", ha="left", va="top", wrap=True)
+    return _save(fig, out_dir / f"photosynthesis.{common.get('format', 'png')}", common)
+
+
+def plot_leaf_salt(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                   plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: leaf salt accumulation, one line per run; one figure per scenario.
+
+    Panels come from ``variables`` (default ``[c_leaf, MW_uptake_leaf]``: leaf
+    storage concentration and cumulative salt taken up into the leaf). If
+    ``threshold`` is set, a horizontal dotted line is drawn on panel
+    ``threshold_panel`` (default 0), e.g. the c_leaf at which photosynthesis
+    reduction starts.
+    """
+    plot_cfg = {"variables": ["c_leaf", "MW_uptake_leaf"], **plot_cfg}
+    fig, axes, _ = _draw_timeseries(manifest, series, scenario, plot_cfg, common, _panels_from_config(plot_cfg))
+    if plot_cfg.get("threshold") is not None:
+        ax = axes[int(plot_cfg.get("threshold_panel", 0))]
+        ax.axhline(float(plot_cfg["threshold"]), color="k", ls=":", lw=0.8)
+        ax.annotate(plot_cfg.get("threshold_label", "Threshold"), (0.005, float(plot_cfg["threshold"])),
+                    xycoords=("axes fraction", "data"), fontsize="x-small", va="bottom")
+    return _save(fig, out_dir / f"leaf_salt.{common.get('format', 'png')}", common)
+
+
+def _day_index(x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Day number (0-based) of each timestep and the list of complete days in ``x`` (days)."""
+    dt = np.median(np.diff(x))
+    day_idx = np.floor(x - dt / 2 + 1e-9).astype(int)
+    days, counts = np.unique(day_idx, return_counts=True)
+    return day_idx, days[counts == counts.max()]
 
 
 def _shade(ax: plt.Axes, x: np.ndarray, mask: np.ndarray) -> None:
@@ -319,10 +406,7 @@ def plot_flux_partition(manifest: pd.DataFrame, series: SeriesDict, scenario: st
             ax.set_ylim(plot_cfg["share_ylim"])
 
         ax = axes[2, j]
-        dt = np.median(np.diff(x))
-        day_idx = np.floor(x - dt / 2 + 1e-9).astype(int)
-        days, counts = np.unique(day_idx, return_counts=True)
-        days = days[counts == counts.max()]
+        day_idx, days = _day_index(x)
         e_day = np.array([ev[day_idx == d].sum() for d in days])
         pos_base, neg_base, total = np.zeros(len(days)), np.zeros(len(days)), np.zeros(len(days))
         for k, q in flux.items():
@@ -348,13 +432,124 @@ def plot_flux_partition(manifest: pd.DataFrame, series: SeriesDict, scenario: st
     axes[0, -1].legend(**legend_kw)
     handles, labels = axes[1, -1].get_legend_handles_labels()
     axes[1, -1].legend(handles + [plt.Rectangle((0, 0), 1, 1, color="0.9")], labels + ["Night"], **legend_kw)
-    fig.suptitle(f"{plot_cfg.get('title', '')} ({rows['scenario_label'].iloc[0]})")
-    fig.tight_layout()
+    fig.suptitle(_suptitle(plot_cfg, rows))
+    return _save(fig, out_dir / f"flux_partition.{common.get('format', 'png')}", common)
 
-    out_path = out_dir / f"flux_partition.{common.get('format', 'png')}"
+
+def plot_daily_transpiration(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                             plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: daily total transpiration (mm), one bar per run side by side for each day; one figure per scenario."""
+    rows = manifest[manifest["scenario"] == scenario]
+    width, height = common.get("figsize", [8, 3.5])
+    fig, ax = plt.subplots(figsize=(width, height))
+    bar_w = 0.8 / len(rows)
+    for j, row in enumerate(rows.itertuples()):
+        df = _window(series[(row.run, scenario)], common.get("window_days"))
+        x = df["days_since_burn_in"].to_numpy()
+        ev = df["ev"].to_numpy(dtype=float)
+        day_idx, days = _day_index(x)
+        dt_s = np.median(np.diff(x)) * 86400
+        e_mm = np.array([ev[day_idx == d].sum() * dt_s / 1000 for d in days])
+        ax.bar(days + 1 + (j - (len(rows) - 1) / 2) * bar_w, e_mm, width=bar_w,
+               color=common.get("run_colors", {}).get(row.run),
+               label=run_label(row.overrides, common.get("display_names", {})))
+    ax.set_xticks(days + 1)
+    ax.set_xlabel(plot_cfg.get("xlabel", "Day"))
+    ax.set_ylabel(plot_cfg.get("ylabel", "Daily transpiration (mm)"))
+    if plot_cfg.get("ylim"):
+        ax.set_ylim(plot_cfg["ylim"])
+    legend_cfg = {**common.get("legend", {}), **plot_cfg.get("legend", {})}
+    ax.legend(title=legend_cfg.get("title"), loc=legend_cfg.get("loc", "upper left"),
+              bbox_to_anchor=legend_cfg.get("bbox_to_anchor", [1.01, 1.0]),
+              fontsize=legend_cfg.get("fontsize", "small"), frameon=legend_cfg.get("frameon", False))
+    fig.suptitle(_suptitle(plot_cfg, rows))
+    return _save(fig, out_dir / f"daily_transpiration.{common.get('format', 'png')}", common)
+
+
+def _daily_storage(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Daily discharge (>= 0) and refill (<= 0) of combined stem + leaf storage (mm), with day numbers (0-based)."""
+    x = df["days_since_burn_in"].to_numpy()
+    q = df["qw_stem"].to_numpy(dtype=float) + df["qw_leaf"].to_numpy(dtype=float)
+    day_idx, days = _day_index(x)
+    to_mm = np.median(np.diff(x)) * 86400 / 1000
+    discharge = np.array([np.clip(q[day_idx == d], 0, None).sum() * to_mm for d in days])
+    refill = np.array([np.clip(q[day_idx == d], None, 0).sum() * to_mm for d in days])
+    return days, discharge, refill
+
+
+def plot_daily_storage(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                       plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: daily stem + leaf storage discharge (above zero, solid) and refill (below zero,
+    hatched) in mm, one bar pair per run side by side for each day; one figure per scenario."""
+    rows = manifest[manifest["scenario"] == scenario]
+    width, height = common.get("figsize", [8, 3.5])
+    fig, ax = plt.subplots(figsize=(width, height))
+    bar_w = 0.8 / len(rows)
+    for j, row in enumerate(rows.itertuples()):
+        df = _window(series[(row.run, scenario)], common.get("window_days"))
+        days, discharge, refill = _daily_storage(df)
+        xpos = days + 1 + (j - (len(rows) - 1) / 2) * bar_w
+        color = common.get("run_colors", {}).get(row.run)
+        ax.bar(xpos, discharge, width=bar_w, color=color,
+               label=run_label(row.overrides, common.get("display_names", {})))
+        ax.bar(xpos, refill, width=bar_w, color=color, alpha=0.5, hatch="///", edgecolor="white")
+    ax.axhline(0, color="k", lw=0.8)
+    ax.set_xticks(days + 1)
+    ax.set_xlabel(plot_cfg.get("xlabel", "Day"))
+    ax.set_ylabel(plot_cfg.get("ylabel", "Daily storage flux (mm)"))
+    if plot_cfg.get("ylim"):
+        ax.set_ylim(plot_cfg["ylim"])
+    handles, labels = ax.get_legend_handles_labels()
+    handles += [plt.Rectangle((0, 0), 1, 1, color="0.5"),
+                plt.Rectangle((0, 0), 1, 1, facecolor="0.5", alpha=0.5, hatch="///", edgecolor="white")]
+    labels += ["Discharge (to xylem)", "Refill (from xylem)"]
+    legend_cfg = {**common.get("legend", {}), **plot_cfg.get("legend", {})}
+    ax.legend(handles, labels, title=legend_cfg.get("title"), loc=legend_cfg.get("loc", "upper left"),
+              bbox_to_anchor=legend_cfg.get("bbox_to_anchor", [1.01, 1.0]),
+              fontsize=legend_cfg.get("fontsize", "small"), frameon=legend_cfg.get("frameon", False))
+    fig.suptitle(_suptitle(plot_cfg, rows))
+    return _save(fig, out_dir / f"daily_storage.{common.get('format', 'png')}", common)
+
+
+def table_daily_storage(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                        plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Table type: daily stem + leaf storage discharge and refill (mm) on selected days, one column
+    per run; written as a LaTeX table for the report.
+
+    ``plot_cfg`` keys: ``days`` (1-based days since end of burn-in), ``day_labels`` (day -> row
+    label), ``column_names`` (run -> column header), ``caption``, ``label``.
+    """
+    rows = manifest[manifest["scenario"] == scenario]
+    day_labels = plot_cfg.get("day_labels", {})
+    col_names = plot_cfg.get("column_names", {})
+    values = {}  # (run, day) -> (discharge, refill)
+    for row in rows.itertuples():
+        days, discharge, refill = _daily_storage(_window(series[(row.run, scenario)], common.get("window_days")))
+        for day in plot_cfg.get("days", [1]):
+            i = list(days).index(day - 1)
+            values[(row.run, day)] = (discharge[i], refill[i])
+
+    lines = [
+        r"\begin{table}[H]",
+        r"\centering",
+        f"\\caption{{{plot_cfg.get('caption', 'Daily storage discharge and refill (mm)')}}}",
+        f"\\label{{{plot_cfg.get('label', 'tab:daily_storage')}}}",
+        r"\begin{tabular}{ll" + "c" * len(rows) + "}",
+        r"\hline",
+        "Day & Storage flux & " + " & ".join(col_names.get(r, r) for r in rows["run"]) + r" \\",
+        r"\hline",
+    ]
+    for day in plot_cfg.get("days", [1]):
+        for k, name in enumerate(["Discharge", "Refill"]):
+            cells = [f"${values[(r, day)][k]:.2f}$" for r in rows["run"]]
+            lead = day_labels.get(day, str(day)) if k == 0 else ""
+            lines.append(f"{lead} & {name} & " + " & ".join(cells) + r" \\")
+        lines.append(r"\hline")
+    lines += [r"\end{tabular}", r"\end{table}"]
+
+    out_path = out_dir / "daily_storage_table.tex"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=common.get("dpi", 300), bbox_inches="tight")
-    plt.close(fig)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return out_path
 
 
@@ -366,6 +561,11 @@ PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "storage_fluxes": plot_storage_fluxes,
     "psi_l": plot_psi_l,
     "flux_partition": plot_flux_partition,
+    "photosynthesis": plot_photosynthesis,
+    "leaf_salt": plot_leaf_salt,
+    "daily_transpiration": plot_daily_transpiration,
+    "daily_storage": plot_daily_storage,
+    "daily_storage_table": table_daily_storage,
 }
 
 
@@ -391,6 +591,12 @@ def main(argv: Optional[List[str]] = None) -> List[Path]:
     manifest, series = load_batch(batch_dir)
     print(f"Batch: {batch_dir.name} ({len(series)} time series)")
 
+    # Batches whose runs carry a ``group`` get one figure per group in figures/<scenario>/<group>/.
+    if "group" in manifest.columns and manifest["group"].notna().any():
+        subsets = [(g, manifest[manifest["group"] == g]) for g in manifest["group"].dropna().unique()]
+    else:
+        subsets = [(None, manifest)]
+
     saved = []
     for key, plot_cfg in plots_cfg.items():
         if key == "common" or not plot_cfg.get("enabled", True):
@@ -399,10 +605,14 @@ def main(argv: Optional[List[str]] = None) -> List[Path]:
             continue
         if key not in PLOT_FUNCTIONS:
             raise KeyError(f"No plot function registered for '{key}'")
-        for scenario in manifest["scenario"].unique():
-            path = PLOT_FUNCTIONS[key](manifest, series, scenario, plot_cfg, common, batch_dir / "figures" / scenario)
-            print(f"  Saved {path.relative_to(batch_dir)}")
-            saved.append(path)
+        for group, sub in subsets:
+            for scenario in sub["scenario"].unique():
+                out_dir = batch_dir / "figures" / scenario
+                if group is not None:
+                    out_dir = out_dir / group
+                path = PLOT_FUNCTIONS[key](sub, series, scenario, plot_cfg, common, out_dir)
+                print(f"  Saved {path.relative_to(batch_dir)}")
+                saved.append(path)
     return saved
 
 

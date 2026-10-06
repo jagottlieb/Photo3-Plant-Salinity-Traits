@@ -69,7 +69,8 @@ Every batch saves **all** model output variables per timestep (see `timeseries/*
 | Phase | Folder | Varied | Runs |
 |-------|--------|--------|------|
 | 1 | `SensitivityAnalysis/Phase 1 - pi0/` | `pi0_leaf` and `pi0_stem`, covaried low/med/high | 3 per scenario |
-| 2+ | to be defined | | |
+| 2 | `SensitivityAnalysis/Phase 2 - root conductance x FE/` | root conductance (`kr` or `B_param`) x `E`, 3 x 3 factorial per group | 18 per scenario |
+| 3+ | to be defined | | |
 
 ### Phase 1 - pi0
 - Low: `pi0_leaf` = -1.1, `pi0_stem` = -0.9
@@ -88,6 +89,19 @@ Scripts used to choose the S2 drydown and explain the model behaviour. They are 
 - `diagnostics/night_psi_l/`: why night psi_l stays far below psi_s once the soil dries (stem storage sets it).
 - `diagnostics/checks/`: quick checks (compartment depths, batch summary, plot ranges).
 - `extra_plots/flux_partition/`: daily supply shares and prototype flux-partition figures (the plot itself is now `flux_partition` in `post_processing.py`).
+
+### Phase 2 - root conductance x FE
+- Two run groups (`group` key on each run; figures go to `figures/<scenario>/<group>/`), each a full 3 x 3 factorial:
+  - `kr_E`: root radial permeability `kr` = 1e-9, 1e-8 (baseline), 1e-7 m/s x `E` = 0.80, 0.90, 0.95
+  - `B_E`: root length density `B_param` = 5000, 10000 (baseline), 20000 x the same `E` levels
+- `kr` is now a `HalophyteStemLeafStorageMultiComp` argument (default 1e-8, the value previously hard-coded in `gsr`). `B_param` changes both root surface area and the soil path length; `kr` only the radial term.
+- `salt_uptake` and `dynamic_E` on; `E` is the starting efficiency.
+- Scenarios (both wet, soil held constant): S4 has 100 mM in compartment 2 only; S5 has 100 mM in both. In S4 the salty compartment's psi_s (about -0.50 MPa) stays below the root node (about -0.29 MPa), so roots lose water to it and take up no salt; E has no effect. S5 forces uptake from salty soil.
+- Extra figures: `photosynthesis` (A and the leaf-salt reduction factor, with the reduction onset marked per run) and `leaf_salt` (c_leaf with the 24.3 mol/m3 reduction threshold, and cumulative leaf salt uptake).
+- Current batch: `20261004_1928` (S4 + S5), after fixing the initial storage salt mass in `HalophyteStemLeafStorageMultiComp` (it used `LA` instead of `LAI`, so c_stem and c_leaf dropped from 5 to ~0.002 mol/m3 on the first step). In S5, c_leaf rises from 5 to about 7.9 / 6.3 / 5.4 mol/m3 for E = 0.80 / 0.90 / 0.95, so the 24.3 threshold is not reached. Root conductance changes uptake by about 15% (mostly through transpiration). Dynamic E does not engage because c_stem stays far below E x c_max.
+
+#### Phase 2 diagnostics
+- `diagnostics/salt_mass/salt_mass.py <batch> [scenario]`: salt mass budget per run (water uptake, salt arriving at roots, admitted, stem/leaf split, share of soil salt stock, per-plant mg NaCl) and a cumulative salt mass figure per group. For `20261004_1928` S5: 5.2-6.0 mol/m2 of salt reaches the roots over 15 days, and (1 - E) of it is admitted (implied E equals the set E). That is 0.26-1.2 mol/m2, or 7-33 mg NaCl per plant. Only 0.23% goes to the leaf (`leaf_uptake_frac` 0.5 weighted by VWTLEAF / (VWTLEAF + VWT)); if all admitted salt went to leaf storage, c_leaf would reach 320-1460 mol/m3. The soil's salt mass is held fixed, so uptake (2-8% of the soil stock over 15 days) never depletes it and excluded salt never accumulates.
 
 Candidate parameters for later phases: storage volumes (`VWT`, `VWTLEAF`), storage conductances (`GWMAX`, `GWMAXLEAF`), elastic moduli (`eta_stem`, `eta_leaf`), and salinity settings (`cs_init`, `E`, `dynamic_E`).
 

@@ -17,7 +17,7 @@ simulation:
   weather_file: data/weather_data/lab_weather_data/Lab_Weather_Summer_Average_Day_30min.xlsx   # average summer day repeated for 45 days at 30 min
   timestepM: 30                       # model timestep (min)
   burn_in_days: 7                     # soil held constant, no salt uptake
-  analysis_days: 5                    # window after burn-in; total = 12 days
+  analysis_days: 15                   # window after burn-in; total = 22 days
   zr_arr: species                     # compartment depths (m); "species" = species ZR per compartment, or a list
   soil_texture: SandyLoam             # class name in soil.py (e.g. Berger, SandyLoam, Loam)
   psi_wf_mode: bartlett               # storage psi_w formulation (stem and leaf)
@@ -55,7 +55,7 @@ baseline:
   root_frac: [0.5, 0.5]   # root fraction per compartment (-)
   B_param: 10000          # root length density parameter
   F_CAP: 0.5              # relative position of the stem storage node along the hydraulic path (-)
-  gpmax_scale: 1.0        # multiplies species GPMAX (1.0 = species value)
+  gpmax_scale: 0.5        # multiplies species GPMAX; 0.5 roughly adds leaf and root resistance to the stem-only Lv et al. (2025) value
 
   # Salt and conductance
   salt_uptake: false
@@ -100,7 +100,7 @@ runs:
 # ylim: null for auto, [min, max] for all panels, or a list of [min, max] per panel.
 plots:
   common:
-    window_days: [0, 5]
+    window_days: [0, 15]
     figsize: [8, 3.5]               # width, height per panel (in)
     dpi: 300
     format: png
@@ -172,24 +172,6 @@ plots:
     daily_ylim: null
     show_sum: true                  # thin black line: sum of shares, 100% when the water balance closes
 
-  daily_transpiration:              # daily total E, one bar per run (run_colors) side by side for each day
-    enabled: true
-    title: "Daily transpiration"
-    xlabel: "Day"
-    ylabel: "Daily transpiration (mm)"
-    ylim: null
-
-  daily_storage:                    # daily stem + leaf storage discharge (above zero) and refill (below zero), one bar pair per run
-    enabled: true
-    title: "Daily storage discharge and refill"
-    xlabel: "Day"
-    ylabel: "Daily storage flux (mm)"
-    ylim: null
-
-  daily_storage_table:              # LaTeX table (figures/<scenario>/daily_storage_table.tex) matching daily_storage
-    enabled: true
-    days: [1, 5]                    # 1-based days since end of burn-in
-    day_labels: {1: "1 (well watered)", 5: "5 (water stressed)"}
-    column_names: {low: Low, med: Medium, high: High}
-    caption: "Daily stem and leaf storage discharge and refill (mm) for the drydown scenarios"
-    label: "tab:pi0_daily_storage"
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261005_1849', created: '2026-10-05T18:49:23', git_commit: da20e7ff44cdba9a6558f4f7c2b41bceccc4aff2,
+  git_dirty: true}

@@ -42,6 +42,8 @@ from soil import ConstantSoil, DrydownSoil, SaltySoilMultiple
 
 # Scenario keys that are not model parameters (everything else must exist in baseline).
 SCENARIO_ONLY_KEYS = {"label", "post_burn_cs", "post_burn_soil_dynamics"}
+# Run keys that are metadata, not model parameters. ``group`` splits figures by run group.
+RUN_META_KEYS = {"name", "group"}
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +79,7 @@ def load_config(path: Path) -> Dict[str, Any]:
     if None in run_names or len(set(run_names)) != len(run_names):
         raise ValueError("Every run needs a unique 'name'")
     for run in cfg["runs"]:
-        unknown = set(run) - {"name"} - baseline_keys
+        unknown = set(run) - RUN_META_KEYS - baseline_keys
         if unknown:
             raise KeyError(f"Run {run['name']}: keys not in baseline: {sorted(unknown)}")
 
@@ -99,7 +101,7 @@ def resolve_params(cfg: Dict[str, Any], run: Dict[str, Any], scenario_name: str)
     scenario = cfg["scenarios"][scenario_name]
     params = copy.deepcopy(cfg["baseline"])
     params.update({k: v for k, v in scenario.items() if k not in SCENARIO_ONLY_KEYS})
-    params.update({k: v for k, v in run.items() if k != "name"})
+    params.update({k: v for k, v in run.items() if k not in RUN_META_KEYS})
     return params, scenario
 
 
@@ -256,6 +258,7 @@ def build_model(params: Dict[str, Any], sim_cfg: Dict[str, Any], weather: Dict[s
 
     species_obj = getattr(species_traits, sim_cfg["species"])()
     zr_arr = resolve_zr_arr(sim_cfg, params, species_obj)
+    species_obj.GPMAX = species_obj.GPMAX * float(params.get("gpmax_scale", 1.0))
     species_obj.VWT = float(params["VWT"])
     species_obj.VWTLEAF = float(params["VWTLEAF"])
     species_obj.GWMAXLEAF = float(params["GWMAXLEAF"])
@@ -319,6 +322,7 @@ def build_model(params: Dict[str, Any], sim_cfg: Dict[str, Any], weather: Dict[s
         F_CAP=params["F_CAP"],
         dynamic_E=bool(params["dynamic_E"]),
         c_stem_max=params["c_stem_max"],
+        kr=float(params.get("kr", 1e-8)),
     )
     photo_obj.hydro_ref = hydro_obj
 
@@ -492,7 +496,8 @@ def main(argv: Optional[List[str]] = None) -> Path:
 
             manifest_rows.append({
                 "run": run["name"],
-                "overrides": json.dumps({k_: v for k_, v in run.items() if k_ != "name"}),
+                "group": run.get("group"),
+                "overrides": json.dumps({k_: v for k_, v in run.items() if k_ not in RUN_META_KEYS}),
                 "scenario": scenario_name,
                 "scenario_label": scenario.get("label", scenario_name),
                 "n_steps": result["n_steps"],

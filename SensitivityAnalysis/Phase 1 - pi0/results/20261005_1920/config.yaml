@@ -179,17 +179,14 @@ plots:
     ylabel: "Daily transpiration (mm)"
     ylim: null
 
-  daily_storage:                    # daily stem + leaf storage discharge (above zero) and refill (below zero), one bar pair per run
-    enabled: true
-    title: "Daily storage discharge and refill"
-    xlabel: "Day"
-    ylabel: "Daily storage flux (mm)"
-    ylim: null
-
-  daily_storage_table:              # LaTeX table (figures/<scenario>/daily_storage_table.tex) matching daily_storage
+  flux_partition_table:             # LaTeX table (figures/<scenario>/flux_partition_table.tex) for the report
     enabled: true
     days: [1, 5]                    # 1-based days since end of burn-in
     day_labels: {1: "1 (well watered)", 5: "5 (water stressed)"}
     column_names: {low: Low, med: Medium, high: High}
-    caption: "Daily stem and leaf storage discharge and refill (mm) for the drydown scenarios"
-    label: "tab:pi0_daily_storage"
+    caption: 'Share of daily transpiration supplied by root uptake and stem and leaf storage (\%) for the drydown scenarios'
+    label: "tab:pi0_flux_partition"
+
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261005_1920', created: '2026-10-05T19:20:13', git_commit: da20e7ff44cdba9a6558f4f7c2b41bceccc4aff2,
+  git_dirty: true}
