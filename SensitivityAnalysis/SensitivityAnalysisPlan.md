@@ -40,7 +40,7 @@ The initial sensitivity analysis for the Photo3-Plant-Salinity-Traits model is o
 - `E`: Salt filtration efficiency
 - `dynamic_E`: Dynamic filtration efficiency
 - `salt_uptake`: Salt uptake enabled
-- `leaf_uptake_frac`: Leaf share of salt uptake
+- `leaf_uptake_frac`: Partition coefficient C_l, the leaf-to-stem ratio of salt concentration increases (leaf share of uptake = C_l VWTLEAF / (VWT + C_l VWTLEAF))
 
 ---
 

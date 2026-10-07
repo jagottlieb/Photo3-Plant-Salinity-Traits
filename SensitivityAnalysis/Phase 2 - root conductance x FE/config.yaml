@@ -64,7 +64,7 @@ baseline:
   salt_uptake: true
   dynamic_E: true         # E rises from its set value toward 1 as c_stem approaches c_stem_max
   E: 0.95                 # salt filtration efficiency (-); starting value when dynamic_E is on
-  leaf_uptake_frac: 0.5   # share of salt uptake allocated to leaf (volume weighted)
+  leaf_uptake_frac: 1.0   # partition coefficient C_l = delta c_leaf / delta c_stem (-); between Campos-Villareal L/S 0.7 and L/R 1.4
   gcut: species           # "species" uses Pecan.GCUT, or give a number (mm/s)
 
 # Scenario keys override baseline; post_burn_* keys control the soil after burn-in.

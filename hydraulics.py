@@ -707,7 +707,7 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		pi0_leaf=-1.5,
 		eta_leaf=5,
 		mcap_leaf=12,
-		leaf_uptake_frac=0.5,
+		leaf_uptake_frac=1.0,
 		gcut=None,
 		E=0.99,
 		F_CAP=0.5,
@@ -761,8 +761,9 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		self.dt = dt
 		self.Salt_Uptake = salt_uptake
 		self.psi_wf_mode = psi_wf_mode
-		# Fraction of salt uptake allocated to the leaf vs stem on a volume weighted-basis
-		self.leaf_uptake_frac = float(np.clip(leaf_uptake_frac*self.VWTLEAF/(self.VWTLEAF + self.VWTSTEM), 0.0, 1.0)) 
+		# Input leaf_uptake_frac is the partition coefficient C_l = delta c_leaf / delta c_stem (-);
+		# stored value is the resulting leaf share of salt uptake, C_l*VWTLEAF / (VWTSTEM + C_l*VWTLEAF).
+		self.leaf_uptake_frac = float(np.clip(leaf_uptake_frac*self.VWTLEAF/(self.VWTSTEM + leaf_uptake_frac*self.VWTLEAF), 0.0, 1.0))
 
 		# Cumulative uptake-tracked salt moles (mol m^-2 ground)
 		self.MW_uptake_stem = 0.0
