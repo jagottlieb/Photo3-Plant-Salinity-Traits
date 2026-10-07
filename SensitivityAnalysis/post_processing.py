@@ -324,6 +324,49 @@ def plot_leaf_salt(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
     return _save(fig, out_dir / f"leaf_salt.{common.get('format', 'png')}", common)
 
 
+def plot_delta_pi0(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                   plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: change in osmotic potential at full turgor over the window, one bar per run;
+    one figure per scenario.
+
+    One panel per entry in ``variables`` (default ``[pi0_stem, pi0_leaf]``). Each bar is the
+    value at the end of ``window_days`` minus the value at its start (the end of burn-in when
+    ``window_days`` is null). Bars take the run colour; the run line style maps to a hatch
+    (``hatches``: line style -> hatch, default ``-`` solid, ``--`` ``//``, ``:`` ``..``).
+    """
+    variables = plot_cfg.get("variables", ["pi0_stem", "pi0_leaf"])
+    titles = plot_cfg.get("panel_titles", variables)
+    hatches = {"-": "", "--": "//", ":": "..", **plot_cfg.get("hatches", {})}
+    rows = manifest[manifest["scenario"] == scenario]
+    colors = common.get("run_colors", {})
+    styles = common.get("run_linestyles", {})
+    window = common.get("window_days")
+    labels = [run_label(r.overrides, common.get("display_names", {})) for r in rows.itertuples()]
+
+    width, height = common.get("figsize", [8, 3.5])
+    fig, axes = plt.subplots(1, len(variables), figsize=(width, height), squeeze=False)
+    for i, (var, ax) in enumerate(zip(variables, axes[0])):
+        for j, row in enumerate(rows.itertuples()):
+            df = series[(row.run, scenario)]
+            x = df["days_since_burn_in"]
+            start = df[x <= window[0]] if window is not None else df[df["is_burn_in"]]
+            end = df[x <= window[1]] if window is not None else df
+            delta = float(end[var].iloc[-1]) - float(start[var].iloc[-1])
+            ax.bar(j, delta, width=0.8, color=colors.get(row.run), edgecolor="k", linewidth=0.5,
+                   hatch=hatches.get(styles.get(row.run, "-"), ""))
+        ax.axhline(0, color="k", lw=0.8)
+        ax.set_xticks(range(len(rows)))
+        ax.set_xticklabels(labels, rotation=60, ha="right", fontsize="x-small")
+        ax.set_title(titles[i], fontsize="medium")
+        if i == 0:
+            ax.set_ylabel(plot_cfg.get("ylabel", "$\\Delta\\pi_0$ (MPa)"))
+        lim = _panel_ylim(plot_cfg.get("ylim"), i)
+        if lim:
+            ax.set_ylim(lim)
+    fig.suptitle(_suptitle(plot_cfg, rows))
+    return _save(fig, out_dir / f"delta_pi0.{common.get('format', 'png')}", common)
+
+
 def _day_index(x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Day number (0-based) of each timestep and the list of complete days in ``x`` (days)."""
     dt = np.median(np.diff(x))
@@ -563,6 +606,7 @@ PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "flux_partition": plot_flux_partition,
     "photosynthesis": plot_photosynthesis,
     "leaf_salt": plot_leaf_salt,
+    "delta_pi0": plot_delta_pi0,
     "daily_transpiration": plot_daily_transpiration,
     "daily_storage": plot_daily_storage,
     "daily_storage_table": table_daily_storage,

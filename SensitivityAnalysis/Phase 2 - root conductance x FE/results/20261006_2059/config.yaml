@@ -36,7 +36,7 @@ baseline:
   eta_stem: 5.8           # bulk elastic modulus (MPa)
   mcap_stem: 12           # slope of psi_w above full turgor (MPa)
   vwi_stem: 0.85          # initial storage fraction (-)
-  c_stem: 13.5            # initial storage salt concentration (mol/m3); Campos-Villareal stem/root average
+  c_stem: 5.0             # initial storage salt concentration (mol/m3)
   c_stem_max: null        # cap for dynamic E; null uses max soil cs
   VWT: 0.011              # max stem storage (m3/m2 leaf); Pecan value
   GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s)); equation gives ~0.224
@@ -48,7 +48,7 @@ baseline:
   eta_leaf: 17.5          # bulk elastic modulus (MPa); notebook value, hydraulics default is 5
   mcap_leaf: 12           # slope of psi_w above full turgor (MPa)
   vwi_leaf: 0.90          # initial storage fraction (-)
-  c_leaf: 7.0             # initial leaf salt concentration (mol/m3); Campos-Villareal leaf; null uses c_stem
+  c_leaf: null            # null uses c_stem
   VWTLEAF: 0.00005        # max leaf storage (m3/m2 leaf); Pecan value (from American beech)
   GWMAXLEAF: 0.0005       # leaf storage-to-xylem conductance (um/(MPa s)); Pecan value (from American beech)
 
@@ -190,14 +190,6 @@ plots:
     ylim: null
     title: "Leaf salt accumulation"
 
-  delta_pi0:                        # change in pi0 from end of burn-in to end of window; hatch = FE level
-    enabled: true
-    variables: [pi0_leaf]
-    panel_titles: ["Leaf storage"]
-    ylabel: "$\\Delta\\pi_{0,leaf}$ (MPa)"
-    ylim: null
-    title: "Change in osmotic potential at full turgor"
-
   transpiration:
     enabled: true
     variables: [ev]
@@ -251,3 +243,7 @@ plots:
     share_ylim: null
     daily_ylim: null
     show_sum: true
+
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261006_2059', created: '2026-10-06T20:59:41', git_commit: b5f84b897e3492cab26bfed8dfcac007029a338a,
+  git_dirty: false}

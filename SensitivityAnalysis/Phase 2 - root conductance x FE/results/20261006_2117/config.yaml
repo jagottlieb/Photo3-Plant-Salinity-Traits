@@ -192,9 +192,9 @@ plots:
 
   delta_pi0:                        # change in pi0 from end of burn-in to end of window; hatch = FE level
     enabled: true
-    variables: [pi0_leaf]
-    panel_titles: ["Leaf storage"]
-    ylabel: "$\\Delta\\pi_{0,leaf}$ (MPa)"
+    variables: [pi0_stem, pi0_leaf]
+    panel_titles: ["Stem storage", "Leaf storage"]
+    ylabel: "$\\Delta\\pi_0$ (MPa)"
     ylim: null
     title: "Change in osmotic potential at full turgor"
 
@@ -251,3 +251,7 @@ plots:
     share_ylim: null
     daily_ylim: null
     show_sum: true
+
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261006_2117', created: '2026-10-06T21:17:46', git_commit: b5f84b897e3492cab26bfed8dfcac007029a338a,
+  git_dirty: true}
