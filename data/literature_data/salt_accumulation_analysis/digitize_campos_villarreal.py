@@ -9,7 +9,6 @@ Usage:
     python digitize_campos_villarreal.py --write-xlsx  # also write the sheet into the workbook
 """
 import argparse
-import shutil
 from pathlib import Path
 
 import numpy as np
@@ -17,10 +16,11 @@ import pandas as pd
 import pymupdf
 from PIL import Image, ImageDraw
 
+from workbook_io import write_sheets
+
 LIT = Path(__file__).resolve().parents[1]
 PDF = LIT / "Campos-Villareal 2017 (1).pdf"
-XLSX = LIT / "Photosynthesis Stomatal Conductance Reduction and Dry Weight Data.xlsx"
-SHEET = "Campos-Villareal Ions"
+SHEET = "Campos-Villareal Ion Accum"
 OUT = LIT.parents[1] / "output" / "campos_villarreal_digitized"
 
 CULTIVARS = ["Riverside", "SVA1", "Apache", "SVA2"]  # bar order within each salinity group
@@ -192,23 +192,6 @@ def digitize_figure(fig):
     return rows
 
 
-def write_xlsx(df):
-    from openpyxl import load_workbook
-    from openpyxl.utils.dataframe import dataframe_to_rows
-    shutil.copy2(XLSX, OUT / (XLSX.stem + "_backup.xlsx"))
-    wb = load_workbook(XLSX)
-    if SHEET in wb.sheetnames:
-        del wb[SHEET]
-    ws = wb.create_sheet(SHEET)
-    ws.append([f"Digitized from Campos-Villarreal et al. 2017 Figures 1 (Na+) and 2 (Cl-) "
-               f"with data/literature_data/salt_accumulation_analysis/{Path(__file__).name}"])
-    ws.append([])
-    for r in dataframe_to_rows(df, index=False, header=True):
-        ws.append(r)
-    wb.save(XLSX)
-    print(f"Wrote {len(df)} rows to '{SHEET}' in {XLSX.name}")
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--write-xlsx", action="store_true")
@@ -218,7 +201,10 @@ def main():
     print(df.pivot_table(index=["ion", "compartment", "salinity_dS_m"], columns="cultivar",
                          values="value", sort=False).round(1).to_string())
     if args.write_xlsx:
-        write_xlsx(df)
+        notes = [f"Digitized from Campos-Villarreal et al. 2017 Figures 1 (Na+) and 2 (Cl-) "
+                 f"with data/literature_data/salt_accumulation_analysis/{Path(__file__).name}",
+                 "Means over n=240 observations; error bars are SE of the mean."]
+        write_sheets([(SHEET, notes, df)])
 
 
 if __name__ == "__main__":
