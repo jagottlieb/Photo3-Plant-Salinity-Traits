@@ -9,9 +9,9 @@ alwaysApply: false
   hydraulics, soil); don't duplicate sub-model logic in notebooks or scripts.
 - Species parameters live in species_traits.py.
 - Config and parameter sets go in YAML files, not hard-coded dicts
-  (sensitivity runs: SensitivityAnalysis/Phase N - name/config.yaml).
+  (sensitivity runs: sensitivity_analysis/Phase N - name/config.yaml).
 - Docstrings plus type hints on new functions and classes.
-- Plots: seaborn whitegrid, serif font stack as in SensitivityAnalysis/post_processing.py.
-- New notebook versions: copy to _v(N+1); move the superseded version to Archive/.
+- Plots: seaborn whitegrid, serif font stack as in sensitivity_analysis/post_processing.py.
+- New notebook versions: copy to _v(N+1); move the superseded version to archive/.
 - Write results to output/ (gitignored); sensitivity batches go to their Phase results/ folder.
 - Environment: conda.

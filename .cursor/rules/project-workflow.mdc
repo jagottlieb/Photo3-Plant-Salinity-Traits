@@ -9,14 +9,14 @@ alwaysApply: true
 - photosynthesis.py / hydraulics.py / soil.py: mixin sub-models (C3, storage, salty soils)
 - species_traits.py: species parameter sets
 - functions.py, dics.py: global functions and constants
-- SensitivityAnalysis/: phase-based sensitivity runs
+- sensitivity_analysis/: phase-based sensitivity runs
   - sensitivity_analysis.py runs a Phase config; post_processing.py makes figures
   - SensitivityAnalysisPlan.md describes the phases
   - "Phase N - name/" folders hold config.yaml and results/<batch_id>/
     (only each batch's frozen config.yaml is tracked); they may also hold
     diagnostics/ and extra_plots/ scripts used to tune or explain the phase
 - data/: weather_data/, soil_data/, sap_flux/, literature_data/ inputs and helper notebooks
-- Notebooks: *_vN.ipynb (latest version is active); Archive/ holds legacy code
+- Notebooks: *_vN.ipynb (latest version is active); archive/ holds legacy code
 - output/ is generated and gitignored
 
 ## Start of each new chat (keep it light)
@@ -25,7 +25,7 @@ alwaysApply: true
 3. Never read whole .ipynb files during the scan (embedded outputs are huge).
 4. Give a 2-3 line status summary, then suggest cleanup items if any:
    untracked or stray files, generated artifacts (e.g. *_executed.ipynb),
-   superseded _vN notebooks or scripts to move to Archive/.
+   superseded _vN notebooks or scripts to move to archive/.
    Ask before changing anything.
 
 ## Commits

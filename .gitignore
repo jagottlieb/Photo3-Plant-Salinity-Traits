@@ -16,7 +16,7 @@ output/
 .ipynb_checkpoints/
 
 # Sensitivity analysis results: keep only the frozen per-batch config
-SensitivityAnalysis/*/results/*/*
-!SensitivityAnalysis/*/results/*/config.yaml
+sensitivity_analysis/*/results/*/*
+!sensitivity_analysis/*/results/*/config.yaml
 # Regenerable timeseries written by Phase diagnostic scripts
-SensitivityAnalysis/*/diagnostics/**/*.csv
+sensitivity_analysis/*/diagnostics/**/*.csv

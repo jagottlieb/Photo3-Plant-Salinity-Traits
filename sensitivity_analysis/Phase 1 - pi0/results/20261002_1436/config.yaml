@@ -1,0 +1,164 @@
+# Phase 1 - pi0
+# Targeted runs covarying leaf and stem osmotic potential at full turgor (pi0).
+# Everything not listed under `runs` is held at `baseline`.
+#
+# From the repo root:
+# Run:   python sensitivity_analysis/sensitivity_analysis.py "sensitivity_analysis/Phase 1 - pi0/config.yaml"
+# Plot:  python sensitivity_analysis/post_processing.py "sensitivity_analysis/Phase 1 - pi0/config.yaml" --batch latest
+
+phase:
+  name: "Phase 1 - pi0"
+  description: >
+    Covary pi0_leaf and pi0_stem at low/med/high levels with all other
+    parameters held at baseline.
+
+simulation:
+  species: Pecan                      # class name in species_traits.py
+  weather_file: data/weather_data/lab_weather_data/Lab_Weather_Summer_Average_Day_30min.xlsx   # average summer day repeated for 45 days at 30 min
+  timestepM: 30                       # model timestep (min)
+  burn_in_days: 7                     # soil held constant, no salt uptake
+  analysis_days: 15                   # window after burn-in; total = 22 days
+  zr_arr: [1.0, 1.0]                  # compartment depths (m)
+  psi_wf_mode: bartlett               # storage psi_w formulation (stem and leaf)
+  gwmax_mode: equation                # equation: GWMAX from VWT and species CAP; manual: use baseline.GWMAX_manual
+  enable_post_burn_cs_reset: true     # apply scenario post_burn_cs at end of burn-in
+
+# All values match analysis_notebook_sensitivity_v3.ipynb unless noted.
+baseline:
+  # Stem storage
+  pi0_stem: -1.1          # osmotic potential at full turgor (MPa)
+  wft_stem: 1.0           # relative water content at full turgor (-)
+  wr_stem: 0.40           # residual water fraction (-)
+  eta_stem: 5.8           # bulk elastic modulus (MPa)
+  mcap_stem: 12           # slope of psi_w above full turgor (MPa)
+  vwi_stem: 0.85          # initial storage fraction (-)
+  c_stem: 5.0             # initial storage salt concentration (mol/m3)
+  c_stem_max: null        # cap for dynamic E; null uses max soil cs
+  VWT: 0.011              # max stem storage (m3/m2 leaf); Pecan value
+  GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s)); equation gives ~0.224
+
+  # Leaf storage
+  pi0_leaf: -1.4          # osmotic potential at full turgor (MPa)
+  wft_leaf: 1.0           # relative water content at full turgor (-)
+  wr_leaf: 0.46           # residual water fraction (-); Rieger and Daniell, Pecan
+  eta_leaf: 17.5          # bulk elastic modulus (MPa); notebook value, hydraulics default is 5
+  mcap_leaf: 12           # slope of psi_w above full turgor (MPa)
+  vwi_leaf: 0.90          # initial storage fraction (-)
+  c_leaf: null            # null uses c_stem
+  VWTLEAF: 0.00005        # max leaf storage (m3/m2 leaf); Pecan value (from American beech)
+  GWMAXLEAF: 0.0005       # leaf storage-to-xylem conductance (um/(MPa s)); Pecan value (from American beech)
+
+  # Soil and roots
+  s_init: [0.45, 0.45]    # initial relative soil moisture per compartment (-)
+  cs_init: [0.0, 0.0]     # initial soil salinity per compartment (mM)
+  root_frac: [0.5, 0.5]   # root fraction per compartment (-)
+  B_param: 10000          # root length density parameter
+  F_CAP: 0.5              # relative position of the stem storage node along the hydraulic path (-)
+
+  # Salt and conductance
+  salt_uptake: false
+  dynamic_E: false
+  E: 0.95                 # salt filtration efficiency (-); hydraulics default is 0.99
+  leaf_uptake_frac: 0.5   # share of salt uptake allocated to leaf (volume weighted)
+  gcut: species           # "species" uses Pecan.GCUT, or give a number (mm/s)
+
+# Scenario keys override baseline; post_burn_* keys control the soil after burn-in.
+scenarios:
+  S1:
+    label: Baseline
+    cs_init: [0.0, 0.0]
+    post_burn_cs: [0.0, 0.0]
+    post_burn_soil_dynamics: [constant, constant]
+  S2:
+    label: Drydown
+    cs_init: [0.0, 0.0]
+    post_burn_cs: [0.0, 0.0]
+    post_burn_soil_dynamics: [drydown, constant]
+  S3:
+    label: Drydown & Salt
+    salt_uptake: true
+    dynamic_E: true
+    cs_init: [0.0, 100.0]
+    post_burn_cs: [0.0, 100.0]
+    post_burn_soil_dynamics: [drydown, constant]
+
+active_scenarios: [S2]
+
+# Each run overrides baseline keys; every run is repeated for each active scenario.
+runs:
+  - {name: low,  pi0_leaf: -1.1, pi0_stem: -0.9}
+  - {name: med,  pi0_leaf: -1.4, pi0_stem: -1.1}
+  - {name: high, pi0_leaf: -1.7, pi0_stem: -1.3}
+
+# Read by post_processing.py at plot time, so edits here apply without re-running.
+# x axis is days since end of burn-in. Legend entries are each run's override values,
+# written with display_names.
+# ylim: null for auto, [min, max] for all panels, or a list of [min, max] per panel.
+plots:
+  common:
+    window_days: [0, 15]
+    figsize: [8, 3.5]               # width, height per panel (in)
+    dpi: 300
+    format: png
+    font_size: 10
+    linewidth: 1.2
+    run_colors: {low: "#9ecae1", med: "#4292c6", high: "#08519c"}
+    xlabel: "Days"
+    display_names:                  # parameter name -> legend text (matplotlib mathtext)
+      pi0_leaf: "$\\pi_{0,leaf}$"
+      pi0_stem: "$\\pi_{0,stem}$"
+    legend:                         # any key can be overridden in a figure block
+      title: null                   # e.g. "$\\pi_0$ (MPa)"
+      loc: upper left
+      bbox_to_anchor: [1.01, 1.0]   # axes fraction; x > 1 places it right of the axes
+      fontsize: small
+      frameon: false
+
+  transpiration:
+    enabled: true
+    variables: [ev]
+    scale: 1.0
+    ylabel: "Transpiration, $E$ ($\\mu$m s$^{-1}$)"
+    ylim: null
+    title: "Transpiration"
+
+  root_uptake:
+    enabled: true
+    variables: [qs]                 # per-compartment pair; one panel per compartment
+    compartments: [1, 2]
+    panel_titles: ["Compartment 1", "Compartment 2"]
+    scale: 1.0
+    ylabel: "Root water uptake, $q_s$ ($\\mu$m s$^{-1}$)"
+    ylim: [0, 0.05]                 # shared by both compartment panels
+    title: "Root water uptake"
+
+  soil_water_potential:
+    enabled: true
+    variables: [psi_s]              # per-compartment pair; one panel per compartment
+    compartments: [1, 2]
+    panel_titles: ["Compartment 1", "Compartment 2"]
+    scale: 1.0
+    ylabel: "Soil water potential, $\\psi_s$ (MPa)"
+    ylim: [-0.02, 0]                # shared by both compartment panels
+    title: "Soil water potential"
+
+  storage_fluxes:
+    enabled: true
+    variables: [qw_stem, qw_leaf]   # one panel per variable
+    panel_titles: ["Stem storage", "Leaf storage"]
+    scale: 1.0
+    ylabel: "Storage flux ($\\mu$m s$^{-1}$)"
+    ylim: null
+    title: "Storage fluxes (positive = release to xylem)"
+
+  psi_l:
+    enabled: true
+    variables: [psi_l]
+    scale: 1.0
+    ylabel: "Leaf water potential, $\\psi_l$ (MPa)"
+    ylim: null
+    title: "Leaf water potential"
+
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261002_1436', created: '2026-10-02T14:36:16', git_commit: b529f69a9b32850a46e80b228b1218311d558e25,
+  git_dirty: false}
