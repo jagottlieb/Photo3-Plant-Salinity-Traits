@@ -140,6 +140,7 @@ class Pecan(object): #Pecan tree ()
 	GWMAX = CAP * VWT *10**6/ (0.63 * 4 * 60 * 60) # stem storage-to-xylem conductance, um/(MPa s); high but plausible per sap-flux timescale
 	#GWMAXLEAF = 0.001 # leaf storage-to-xylem conductance, um/(MPa s); rough estimate targeting faster turnover than stem storage
 	GWMAXLEAF = 0.0005  # Value from American Beech, um/(MPa s)
+	LWC = 0.61  # leaf water content (water / fresh mass), average of lab pecan leaf samples
 
 
 	RD0 = 3.01  # Standard dark respiration at 25 C (umol/(m^2s))

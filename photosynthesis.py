@@ -207,7 +207,9 @@ class C3_c_leaf_reduc(C3):
 		# Update reduction factor from current leaf storage concentration before computing an()
 		if self.hydro_ref is not None and hasattr(self.hydro_ref, 'c_leaf'):
 			c_leaf_val = self.hydro_ref.c_leaf
-			self.reduction_factor = min(0.19 * max(c_leaf_val - 24.3, 0.0)**0.36, 0.9999)  # Cap reduction factor at 0.9999 to avoid complete shutdown of photosynthesis
+			# Linear fit to Campos-Villareal treatment means (leaf Na+ in mM at Pecan.LWC); threshold is
+			# 4.84 mM above the 7.20 mM mean control leaf Na+. Capped below 1 to avoid complete shutdown.
+			self.reduction_factor = min(0.0355 * max(c_leaf_val - 12.0, 0.0), 0.9999)
 		else:
 			self.reduction_factor = 0.0
 		self.ci = self.ciNew(self.cs, atm.ta, atm.qa)
