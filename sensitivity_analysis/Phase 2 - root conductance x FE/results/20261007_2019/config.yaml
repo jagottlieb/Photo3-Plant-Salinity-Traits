@@ -13,7 +13,7 @@ phase:
   description: >
     Full factorial of root radial permeability kr and filtration
     efficiency E at low/med/high levels, with salt uptake and dynamic E on,
-    with 100 mM salt in both compartments, held wet (S5) or drying down (S4).
+    in wet soil with salt in compartment 2.
 
 simulation:
   species: Pecan                      # class name in species_traits.py
@@ -69,11 +69,11 @@ baseline:
 # Scenario keys override baseline; post_burn_* keys control the soil after burn-in.
 scenarios:
   S4:
-    label: Salt both, drydown
+    label: Salt, wet
     s_init: [0.45, 0.45]
-    cs_init: [100.0, 100.0]
-    post_burn_cs: [100.0, 100.0]
-    post_burn_soil_dynamics: [drydown, drydown]
+    cs_init: [0.0, 100.0]
+    post_burn_cs: [0.0, 100.0]
+    post_burn_soil_dynamics: [constant, constant]
   S5:
     label: Salt both, wet
     s_init: [0.45, 0.45]
@@ -81,8 +81,8 @@ scenarios:
     post_burn_cs: [100.0, 100.0]
     post_burn_soil_dynamics: [constant, constant]
 
-# S4 and S5 both start at 100 mM in both compartments. S4 dries both after burn-in; soil salt mass is
-# fixed, so cs rises as s falls. (Before batch 20261007_2019, S4 had 100 mM in compartment 2 only, held wet.)
+# S4: compartment 2 psi_s (~-0.50 MPa) stays below the root node (~-0.29 MPa), so roots leak
+# water into it and take up no salt; S5 forces uptake from salty soil.
 active_scenarios: [S4, S5]
 
 # Each run overrides baseline keys; every run is repeated for each active scenario.
@@ -100,7 +100,7 @@ runs:
 
 # Read by post_processing.py at plot time, so edits here apply without re-running.
 # x axis is days since end of burn-in. Legend entries are each run's override values,
-# written with display_names. Colour hue = E level, shade = kr level.
+# written with display_names. Colour = root conductance level, line style = E level.
 # ylim: null for auto, [min, max] for all panels, or a list of [min, max] per panel.
 plots:
   common:
@@ -110,19 +110,26 @@ plots:
     format: png
     font_size: 10
     linewidth: 1.2
-    run_colors:                     # hue = FE (green 0.85, blue 0.90, purple 0.95); shade = kr (light low to dark high)
-      kr_lo__E_lo: "#a1d99b"
+    run_colors:
+      kr_lo__E_lo: "#9ecae1"
       kr_lo__E_med: "#9ecae1"
-      kr_lo__E_hi: "#bcbddc"
-      kr_med__E_lo: "#41ab5d"
+      kr_lo__E_hi: "#9ecae1"
+      kr_med__E_lo: "#4292c6"
       kr_med__E_med: "#4292c6"
-      kr_med__E_hi: "#807dba"
-      kr_hi__E_lo: "#005a32"
+      kr_med__E_hi: "#4292c6"
+      kr_hi__E_lo: "#08519c"
       kr_hi__E_med: "#08519c"
-      kr_hi__E_hi: "#3f007d"
-    # run_linestyles off for now: all lines solid and delta_pi0 bars unhatched. To restore E line styles:
-    # run_linestyles: {kr_lo__E_lo: ":", kr_lo__E_med: "--", kr_lo__E_hi: "-", kr_med__E_lo: ":", kr_med__E_med: "--",
-    #                  kr_med__E_hi: "-", kr_hi__E_lo: ":", kr_hi__E_med: "--", kr_hi__E_hi: "-"}
+      kr_hi__E_hi: "#08519c"
+    run_linestyles:
+      kr_lo__E_lo: ":"
+      kr_lo__E_med: "--"
+      kr_lo__E_hi: "-"
+      kr_med__E_lo: ":"
+      kr_med__E_med: "--"
+      kr_med__E_hi: "-"
+      kr_hi__E_lo: ":"
+      kr_hi__E_med: "--"
+      kr_hi__E_hi: "-"
     xlabel: "Days"
     display_names:                  # parameter name -> legend text (matplotlib mathtext)
       kr: "$k_r$"
@@ -175,7 +182,7 @@ plots:
     enabled: true
     variables: [qs]                 # per-compartment pair; one panel per compartment
     compartments: [1, 2]
-    panel_titles: ["Compartment 1", "Compartment 2"]
+    panel_titles: ["Compartment 1", "Compartment 2 (salty)"]
     scale: 1.0
     ylabel: "Root water uptake, $q_s$ ($\\mu$m s$^{-1}$)"
     ylim: null
@@ -185,7 +192,7 @@ plots:
     enabled: true
     variables: [psi_s]              # per-compartment pair; one panel per compartment
     compartments: [1, 2]
-    panel_titles: ["Compartment 1", "Compartment 2"]
+    panel_titles: ["Compartment 1", "Compartment 2 (salty)"]
     scale: 1.0
     ylabel: "Soil water potential, $\\psi_s$ (MPa)"
     ylim: null                      # salt shifts compartment 2 far below Phase 1's [-0.07, 0]
@@ -216,3 +223,7 @@ plots:
     share_ylim: null
     daily_ylim: null
     show_sum: true
+
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261007_2019', created: '2026-10-07T20:19:22', git_commit: 910e48c3421867144c675b061e99247676bf61a5,
+  git_dirty: true}

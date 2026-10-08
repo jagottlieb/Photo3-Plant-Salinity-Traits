@@ -120,7 +120,7 @@ for group in table["group"].unique():
             continue
         for ax, (label, k) in zip(axes, panels):
             y = ys[k - 1] * (1e3 if k == 3 else 1)
-            ax.plot(x, y, color=common["run_colors"].get(run), ls=common["run_linestyles"].get(run, "-"),
+            ax.plot(x, y, color=common["run_colors"].get(run), ls=common.get("run_linestyles", {}).get(run, "-"),
                     lw=1.2, label=run_label(r.overrides, common.get("display_names", {})))
             ax.set_ylabel(label)
     axes[0].legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize="small", frameon=False)

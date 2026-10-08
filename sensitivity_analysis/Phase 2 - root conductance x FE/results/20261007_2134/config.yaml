@@ -216,3 +216,7 @@ plots:
     share_ylim: null
     daily_ylim: null
     show_sum: true
+
+# --- Batch metadata (written by sensitivity_analysis.py) ---
+batch: {batch_id: '20261007_2134', created: '2026-10-07T21:34:28', git_commit: 910e48c3421867144c675b061e99247676bf61a5,
+  git_dirty: true}
