@@ -11,9 +11,9 @@ Stacked panels share the time axis (burn-in shaded):
 Storage fluxes are positive when storage discharges into the xylem and negative
 when it refills. With flux closure, qs_total = E - qw_stem - qw_leaf.
 
-By default the time series is read from a saved batch. With ``--set``, the model
-is instead re-run in memory with those parameter overrides (nothing is saved to
-results/). Figures go to ``diagnostics/figures/<label>/`` with a ``settings.yaml``
+By default the time series is read from a saved batch. With ``--set`` and/or
+``--s-init-scale``, the model is instead re-run in memory with those parameter
+overrides or scaled initial soil moisture (nothing is saved to results/). Figures go to ``diagnostics/figures/<label>/`` with a ``settings.yaml``
 recording the batch or overrides used.
 
 Usage (from the repo root):
@@ -45,6 +45,7 @@ sys.path.append(str(DIAG_DIR.parent))  # after sensitivity_analysis/ so its post
 
 import soil
 from post_processing import _save, set_plot_style  # sensitivity_analysis/post_processing.py
+import run_simulation
 from run_simulation import simulate
 
 SIDE_COLORS = ["#08519c", "#d95f0e"]
@@ -96,6 +97,16 @@ def parse_overrides(items: List[str]) -> Dict[str, Any]:
                 pass
         overrides[key.strip()] = parsed
     return overrides
+
+
+def scale_initial_s(scale: float) -> None:
+    """Multiply the data-derived initial soil moisture used by ``simulate`` by ``scale`` (capped at 1)."""
+    data_initial_s = run_simulation.lab_inputs.initial_s
+
+    def scaled(*args: Any, **kwargs: Any) -> List[float]:
+        return [min(v * scale, 1.0) for v in data_initial_s(*args, **kwargs)]
+
+    run_simulation.lab_inputs.initial_s = scaled
 
 
 def plot_water_balance(df: pd.DataFrame, cfg: Dict[str, Any], out_path: Path, subtitle: str = "") -> Path:
@@ -161,6 +172,8 @@ def main(argv: Optional[List[str]] = None) -> Path:
                         help="Re-run the model in memory with these params overrides instead of reading a batch")
     parser.add_argument("--sap-flux", action="store_true",
                         help="Also save the root uptake vs sap flux figure (post_processing.py style, burn-in dropped)")
+    parser.add_argument("--s-init-scale", type=float, default=1.0,
+                        help="Re-run in memory with the data-derived initial soil moisture multiplied by this factor")
     parser.add_argument("--label", help="Figure subfolder under figures/ (default: 'baseline', or the overrides with --set)")
     args = parser.parse_args(argv)
 
@@ -169,17 +182,21 @@ def main(argv: Optional[List[str]] = None) -> Path:
         cfg = yaml.safe_load(f)
     set_plot_style(10)
 
-    if args.set:
+    if args.set or args.s_init_scale != 1.0:
         overrides = parse_overrides(args.set)
         unknown = set(overrides) - set(cfg["params"])
         if unknown:
             raise KeyError(f"Unknown params: {sorted(unknown)}")
         cfg["params"].update(overrides)
-        print(f"Running in memory with {overrides}")
+        changes = dict(overrides)
+        if args.s_init_scale != 1.0:
+            scale_initial_s(args.s_init_scale)
+            changes["s_init_scale"] = args.s_init_scale
+        print(f"Running in memory with {changes}")
         df = simulate(cfg)
-        label = args.label or "_".join(f"{k}={v}" for k, v in overrides.items()).replace(" ", "")
-        subtitle = "In-memory run: " + ", ".join(f"{k} = {v}" for k, v in overrides.items())
-        source = {"source": "in-memory run of config", "overrides": overrides}
+        label = args.label or "_".join(f"{k}={v}" for k, v in changes.items()).replace(" ", "")
+        subtitle = "In-memory run: " + ", ".join(f"{k} = {v}" for k, v in changes.items())
+        source = {"source": "in-memory run of config", "overrides": overrides, "s_init_scale": args.s_init_scale}
     else:
         batch_dir = resolve_batch_dir(config_path.parent / "results", args.batch)
         df = pd.read_csv(batch_dir / "timeseries" / f"{cfg['simulation']['name']}.csv", parse_dates=["datetime"])
