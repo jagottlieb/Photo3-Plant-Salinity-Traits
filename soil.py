@@ -238,6 +238,7 @@ class SaltySoilMultiple(SoilMultiple):
 		# Salt mass per compartment, mol/m2
 		self.MS = self.cs * self.ZR * self.N * self.s
 		self.cs_a = [[] for _ in self.s]
+		self.MS_a = [[] for _ in self.s]
 	def update(self, dt, zr, qs):
 		qs = np.atleast_1d(qs)
 		zr = np.atleast_1d(zr)
@@ -263,6 +264,12 @@ class SaltySoilMultiple(SoilMultiple):
 			self.s_a[i].append(self.s[i])
 			self.psi_s_a[i].append(psi_s_vals[i])
 			self.cs_a[i].append(self.cs[i])
+			self.MS_a[i].append(self.MS[i])
+
+	def output(self):
+		out = super().output()
+		out['MS'] = self.MS_a
+		return out
 
 	def psi_s(self, s, cs=None, i=0):
 		s = np.atleast_1d(s)

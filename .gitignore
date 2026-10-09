@@ -18,5 +18,8 @@ output/
 # Sensitivity analysis results: keep only the frozen per-batch config
 sensitivity_analysis/*/results/*/*
 !sensitivity_analysis/*/results/*/config.yaml
+# Lab experiment simulation results: keep only the frozen per-batch config
+lab_experiment_simulation/results/*/*
+!lab_experiment_simulation/results/*/config.yaml
 # Regenerable timeseries written by Phase diagnostic scripts
 sensitivity_analysis/*/diagnostics/**/*.csv

@@ -1,0 +1,97 @@
+# Lab experiment simulation - Tree 1 split root
+# Model run against the lab measurements for tree 1. Initial soil moisture and salinity come from
+# the start-date probe data; irrigation and salt additions come from the split-tree inputs sheet.
+# Compartment 1 = left side, compartment 2 = right side.
+#
+# From the repo root:
+# Run:   python lab_experiment_simulation/run_simulation.py lab_experiment_simulation/config.yaml
+# Plot:  python lab_experiment_simulation/post_processing.py lab_experiment_simulation/config.yaml --batch latest
+
+simulation:
+  name: tree1                         # time series file name: timeseries/<name>.csv
+  species: Pecan                      # class name in species_traits.py
+  weather_file: data/weather_data/lab_weather_data/Lab_Weather_Summer_Average_Day_30min.xlsx   # average summer day repeated, starts at midnight
+  timestepM: 30                       # model timestep (min)
+  start_date: 2026-08-04              # first day compared with data (00:00)
+  end_date: 2026-08-12                # last day compared with data (inclusive)
+  burn_in_days: 3                     # before start_date: soil held at initial values, no salt uptake
+  soil_texture: Berger                # class name in soil.py; its porosity N converts VWC to s
+  psi_wf_mode: bartlett               # storage psi_w formulation (stem and leaf)
+  gwmax_mode: equation                # equation: GWMAX from VWT and species CAP; manual: use params.GWMAX_manual
+
+lab:
+  tree: 1
+  sides: [left, right]                # compartment order
+  container_volume_mL: 4318           # soil volume per side; compartment depth = volume / ground area
+  ground_area_cm2: 210                # soil area per side (Bucket Info tab)
+  root_diameter_cm: {left: 1.0, right: 1.0}   # placeholder; whole cross-section treated as sapwood
+  vwc_file: data/soil_data/vwc_data/vwc_processed.csv
+  conductivity_file: data/soil_data/matric_potential_conductivity/matric_conductivity_processed.csv
+  conductivity_cols: {left: soil2_conduct_mM, right: soil3_conduct_mM}
+  irrigation_file: data/tree_and_watering_data/split_tree_water_salt_inputs.csv   # volumes in L, salt in mol
+  sap_flux_file: data/sap_flux/sap_velocity_tree1_processed.csv                   # sap velocity in mm/s
+
+# Model parameters (Phase 2 baseline). s_init and cs_init are set from the lab data at run time.
+params:
+  # Stem storage
+  pi0_stem: -1.1          # osmotic potential at full turgor (MPa)
+  wft_stem: 1.0           # relative water content at full turgor (-)
+  wr_stem: 0.40           # residual water fraction (-)
+  eta_stem: 5.8           # bulk elastic modulus (MPa)
+  mcap_stem: 12           # slope of psi_w above full turgor (MPa)
+  vwi_stem: 0.85          # initial storage fraction (-)
+  c_stem: 13.5            # initial storage salt concentration (mol/m3); Campos-Villareal stem/root average
+  c_stem_max: null        # cap for dynamic E; null uses max soil cs
+  VWT: 0.011              # max stem storage (m3/m2 leaf); Pecan value
+  GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s))
+
+  # Leaf storage
+  pi0_leaf: -1.4          # osmotic potential at full turgor (MPa)
+  wft_leaf: 1.0           # relative water content at full turgor (-)
+  wr_leaf: 0.46           # residual water fraction (-); Rieger and Daniell, Pecan
+  eta_leaf: 17.5          # bulk elastic modulus (MPa)
+  mcap_leaf: 12           # slope of psi_w above full turgor (MPa)
+  vwi_leaf: 0.90          # initial storage fraction (-)
+  c_leaf: 7.0             # initial leaf salt concentration (mol/m3); Campos-Villareal leaf
+  VWTLEAF: 0.00005        # max leaf storage (m3/m2 leaf)
+  GWMAXLEAF: 0.0005       # leaf storage-to-xylem conductance (um/(MPa s))
+
+  # Roots
+  root_frac: [0.5, 0.5]   # root fraction per compartment (-)
+  B_param: 10000          # root length density parameter
+  kr: 1.0e-8              # root radial permeability (m/s)
+  F_CAP: 0.5              # relative position of the stem storage node along the hydraulic path (-)
+
+  # Salt and conductance
+  salt_uptake: true
+  dynamic_E: true         # E rises from its set value toward 1 as c_stem approaches c_stem_max
+  E: 0.95                 # salt filtration efficiency (-)
+  leaf_uptake_frac: 1.0   # partition coefficient C_l = delta c_leaf / delta c_stem (-)
+  gcut: species           # "species" uses Pecan.GCUT, or give a number (mm/s)
+
+# Read by post_processing.py at plot time, so edits here apply without re-running.
+plots:
+  common:
+    figsize: [9, 3.0]               # width, height per panel (in)
+    dpi: 300
+    format: png
+    font_size: 10
+    linewidth: 1.2
+    model_color: "#08519c"
+    data_color: "#d95f0e"
+    legend:
+      loc: upper left
+      bbox_to_anchor: [1.01, 1.0]
+      fontsize: small
+      frameon: false
+
+  sap_flux_vs_uptake:
+    enabled: true
+    title: "Tree 1: root water uptake vs ground-area sap flux"
+    panel_titles: ["Left side (compartment 1)", "Right side (compartment 2)"]
+    ylabel: "Flux ($\\mu$m s$^{-1}$)"
+    ylim: null                      # null, [min, max], or a list of [min, max] per panel
+
+# --- Batch metadata ---
+batch: {batch_id: '20261009_0817', created: '2026-10-09T08:17:45', git_commit: 3899b89ba301ecdfe0fe0ea4f3331e1660b887c8,
+  git_dirty: true}

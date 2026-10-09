@@ -149,7 +149,7 @@ def create_batch(config_path: Path) -> Path:
     original_text = config_path.read_text(encoding="utf-8")
     with open(batch_dir / "config.yaml", "w", encoding="utf-8") as f:
         f.write(original_text.rstrip() + "\n\n")
-        f.write("# --- Batch metadata (written by sensitivity_analysis.py) ---\n")
+        f.write("# --- Batch metadata ---\n")
         yaml.safe_dump(batch_meta, f, sort_keys=False, default_flow_style=None)
     return batch_dir
 
