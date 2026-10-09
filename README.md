@@ -16,7 +16,7 @@ An academic article describing the model details is available in Ecological Mode
   *Hartzell, S., Bartlett, M.S. and A. Porporato (2018) Unified representation of the C3, C4, and CAM photosynthetic pathways with the       Photo3 model. Ecological Modelling, doi: 10.1016/j.ecolmodel.2018.06.012.*
 
 # Instructions for formatting weather data for the model input
-Half hourly data for solar radiation, temperature, and specific humidity is needed to run the Photo3 model. Hourly data may be obtained from a variety of sources and then interpolated to the model timestep of 30 minutes using the script cleanData.py, which will produce a new excel file which can be read into the model. In order to use cleanData.py, the data must first be formatted with the following columns: Year, Month, Day, Hour, Minute, GHI, Temperature, Relative Humidity. Data cannot contain gaps larger than 23 hours.
+Half hourly data for solar radiation, temperature, and specific humidity is needed to run the Photo3 model. Hourly data may be obtained from a variety of sources and then interpolated to the model timestep of 30 minutes. Data processing scripts sit beside their raw data in the data/ subfolders (the original Photo3 weather interpolation script, cleanData.py, is kept in archive/ for reference).
 
 The final weather data file supplied to the model should have the headings: Temperature, Relative Humidity, GHI, and should match the model timestep of 30 minutes (see example files in the data/weather_data/sample_data_photo3 folder).
 
