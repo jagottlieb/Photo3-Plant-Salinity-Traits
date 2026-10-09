@@ -88,20 +88,16 @@ def run_lab_simulation(model: Dict[str, Any], params: Dict[str, Any], weather: D
     return {"output": plant.output(), "n_steps": n_steps, "burn_in_steps": burn_in_steps}
 
 
-def main(argv: Optional[List[str]] = None) -> Path:
-    """Run the lab simulation in a config and save the results.
+def simulate(cfg: Dict[str, Any]) -> pd.DataFrame:
+    """Set up lab inputs, run the model for a loaded config, and return the time series.
+
+    Args:
+        cfg: Parsed lab simulation config (``simulation``, ``lab`` and ``params`` sections).
 
     Returns:
-        Path to the batch folder.
+        Output of ``sa.outputs_to_dataframe`` with a leading ``datetime`` column (step end times).
     """
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("config", type=Path, help="Path to the lab simulation config.yaml")
-    args = parser.parse_args(argv)
-
-    config_path = args.config.resolve()
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    sim_cfg, lab, params = cfg["simulation"], cfg["lab"], dict(cfg["params"])
+    sim_cfg, lab, params = dict(cfg["simulation"]), cfg["lab"], dict(cfg["params"])
 
     times = model_times(sim_cfg)
     porosity = getattr(soil, sim_cfg["soil_texture"])().N
@@ -119,14 +115,32 @@ def main(argv: Optional[List[str]] = None) -> Path:
               f"salt = {p['dms'].round(4).tolist()} mol/m2")
 
     weather = sa.load_weather(REPO_ROOT / sim_cfg["weather_file"], float(sim_cfg["timestepM"]), times["total_days"])
-    batch_dir = sa.create_batch(config_path)
-    print(f"Batch folder: {batch_dir}")
-
-    start = time.perf_counter()
     model = sa.build_model(params, sim_cfg, weather)
     result = run_lab_simulation(model, params, weather, sim_cfg, times, pulses)
     df = sa.outputs_to_dataframe(result, weather, sim_cfg)
     df.insert(0, "datetime", times["step_starts"] + pd.Timedelta(minutes=int(sim_cfg["timestepM"])))
+    return df
+
+
+def main(argv: Optional[List[str]] = None) -> Path:
+    """Run the lab simulation in a config and save the results.
+
+    Returns:
+        Path to the batch folder.
+    """
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("config", type=Path, help="Path to the lab simulation config.yaml")
+    args = parser.parse_args(argv)
+
+    config_path = args.config.resolve()
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    sim_cfg = cfg["simulation"]
+
+    batch_dir = sa.create_batch(config_path)
+    print(f"Batch folder: {batch_dir}")
+    start = time.perf_counter()
+    df = simulate(cfg)
     csv_path = batch_dir / "timeseries" / f"{sim_cfg['name']}.csv"
     df.to_csv(csv_path, index=False)
     print(f"Saved {csv_path.relative_to(batch_dir)} ({time.perf_counter() - start:.0f} s)")

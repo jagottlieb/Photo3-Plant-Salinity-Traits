@@ -1,0 +1,4 @@
+config: lab_experiment_simulation\config.yaml
+source: in-memory run of config
+overrides:
+  VWT: 1.0e-06
