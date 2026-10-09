@@ -30,7 +30,11 @@ def set_plot_style(font_size: float = 10) -> None:
 
 
 def load_raw(data_dir: Path = DATA_DIR) -> pd.DataFrame:
-    """Read and concatenate all hourly .xlsx files, indexed by datetime."""
+    """Read and concatenate all hourly .xlsx files, indexed by datetime.
+
+    Exports overlap and the final hour of an earlier export can be a partial
+    average, so duplicate timestamps keep the row from the latest file.
+    """
     frames = []
     for f in sorted(data_dir.glob("*.xlsx")):
         df = pd.read_excel(f)
@@ -38,8 +42,8 @@ def load_raw(data_dir: Path = DATA_DIR) -> pd.DataFrame:
         df["source_file"] = f.name
         frames.append(df)
     df = pd.concat(frames, ignore_index=True)
-    df = df.sort_values("datetime").drop_duplicates("datetime", keep="first")
-    return df.set_index("datetime")
+    df = df.drop_duplicates("datetime", keep="last")
+    return df.set_index("datetime").sort_index()
 
 
 def convert(df: pd.DataFrame) -> pd.DataFrame:
@@ -54,8 +58,13 @@ def convert(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot(df: pd.DataFrame, out_dir: Path = DATA_DIR) -> plt.Figure:
-    """Plot matric potential and conductivity timeseries and save as PNG."""
+    """Plot matric potential and conductivity timeseries and save as PNG.
+
+    Missing hours are left as gaps rather than interpolated across.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
+    file_breaks = df.groupby("source_file").apply(lambda g: g.index.min()).sort_values().iloc[1:]
+    df = df.asfreq("h")
     fig, axes = plt.subplots(3, 1, figsize=(12, 9), sharex=True)
 
     for col in MATRIC_COLS:
@@ -70,7 +79,6 @@ def plot(df: pd.DataFrame, out_dir: Path = DATA_DIR) -> plt.Figure:
         axes[2].plot(df.index, df[f"{col}_mM"], label=col)
     axes[2].set_ylabel("Conductivity (mM)")
 
-    file_breaks = df.groupby("source_file").apply(lambda g: g.index.min()).iloc[1:]
     for ax in axes:
         for t in file_breaks:
             ax.axvline(t, color="grey", ls=":", lw=1)
@@ -88,6 +96,7 @@ def plot(df: pd.DataFrame, out_dir: Path = DATA_DIR) -> plt.Figure:
 if __name__ == "__main__":
     set_plot_style()
     df = convert(load_raw())
-    df.to_csv(DATA_DIR / "matric_conductivity_processed.csv")
+    out_cols = [c for c in df.columns if c.startswith(tuple(MATRIC_COLS + CONDUCT_COLS))]
+    df[out_cols].round(6).to_csv(DATA_DIR / "matric_conductivity_processed.csv")
     plot(df)
     plt.show()
