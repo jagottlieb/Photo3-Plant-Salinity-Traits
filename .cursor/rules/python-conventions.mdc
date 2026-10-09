@@ -13,5 +13,9 @@ alwaysApply: false
 - Docstrings plus type hints on new functions and classes.
 - Plots: seaborn whitegrid, serif font stack as in sensitivity_analysis/post_processing.py.
 - New notebook versions: copy to _v(N+1); move the superseded version to archive/.
-- Write results to output/ (gitignored); sensitivity batches go to their Phase results/ folder.
+- Outputs go next to their inputs, not in output/:
+  - Data processing scripts write processed CSVs and figures into the folder
+    holding the raw data (e.g. data/soil_data/vwc_data/).
+  - Sensitivity/scenario runs write to their Phase results/<batch_id>/ folder
+    (figures in results/<batch_id>/figures/).
 - Environment: conda.

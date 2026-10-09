@@ -15,9 +15,11 @@ alwaysApply: true
   - "Phase N - name/" folders hold config.yaml and results/<batch_id>/
     (only each batch's frozen config.yaml is tracked); they may also hold
     diagnostics/ and extra_plots/ scripts used to tune or explain the phase
-- data/: weather_data/, soil_data/, sap_flux/, literature_data/ inputs and helper notebooks
+- data/: weather_data/, soil_data/, sap_flux/, literature_data/ inputs and helper notebooks;
+  processing scripts sit beside their data and write processed CSVs/figures
+  into the data subfolder they read from (e.g. soil_data/vwc_data/)
 - Notebooks: *_vN.ipynb (latest version is active); archive/ holds legacy code
-- output/ is generated and gitignored
+- output/ is legacy (gitignored); don't write new outputs there
 
 ## Start of each new chat (keep it light)
 1. Run `git status -sb` and note branch and ahead/behind vs origin.
@@ -33,6 +35,7 @@ alwaysApply: true
 - Message: imperative, <=72 chars, clauses joined by semicolons
   (e.g. "Add Phase 2 config; plot storage volumes").
 - Only stage files related to the work; never commit output/, batch results
-  (other than frozen configs) or executed notebooks.
+  (other than frozen configs) or executed notebooks. Processed CSVs/figures in
+  data/ subfolders are tracked and can be committed with their script.
 - At each push, repeat the cleanup suggestion check.
 - After pushing, suggest starting a new chat for the next chunk of work.
