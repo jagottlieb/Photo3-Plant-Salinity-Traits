@@ -344,13 +344,14 @@ class Berger(object):
 	ALPHA = 0.0502   # 1/cm
 	VG_N = 1.768
 	VG_M = 1 - 1/VG_N
-	L = 0.5   # pore-connectivity/tortuosity parameter
-	N = 0.8   # measured porosity; relative saturation s = theta/N
-	KS = 100.   # saturated hydraulic conductivity (cm/day, as for all textures); used by leak()
-	# Unused (Van Genuchten used instead); kept so generic soil-type lookups don't fail
+	L = 1.268   # Mualem pore-connectivity/tortuosity parameter; used by leak()
+	N = 0.8     # measured porosity; relative saturation s = theta/N
+	KS = 6400.  # saturated hydraulic conductivity (cm/day, as for all textures); used by leak()
+	# PSI_SS and B are the Clapp-Hornberger parameters. Berger does not use them:
+	# psi_s() uses Van Genuchten and leak() uses Mualem. Kept so generic soil-type lookups don't fail.
 	PSI_SS = None
 	B = None
-	SH = .15
+	SH = .15    # relative moisture below which soil evaporation is zero; used by evap()
 	def __init__(self):
 		pass
 	def psi_s(self, s):

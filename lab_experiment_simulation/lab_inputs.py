@@ -107,13 +107,14 @@ def apply_pulse(soil: Any, ds: np.ndarray, dms: np.ndarray) -> None:
 def sap_flux_ground_basis(lab: Dict[str, Any]) -> pd.DataFrame:
     """Sap flux per side converted to a ground-area basis (um/s, same units as ``qs``).
 
-    Sap velocity (mm/s) is multiplied by root sapwood area / ground area. Uses
-    ``root_area_cm2`` when given, otherwise the whole cross-section (pi d^2 / 4).
+    Sap velocity (mm/s) is multiplied by ``root_area_cm2`` / ground area.
     """
     df = _read_csv(lab, "sap_flux_file", "datetime")
     out = pd.DataFrame(index=df.index)
     areas = lab.get("root_area_cm2")
+    if not areas:
+        raise KeyError("lab.root_area_cm2 is required (cm2 per side)")
     for side in lab["sides"]:
-        sapwood_cm2 = areas[side] if areas else np.pi * lab["root_diameter_cm"][side] ** 2 / 4
+        sapwood_cm2 = areas[side]
         out[side] = df[f"tree{lab['tree']}_{side}_vs"] * sapwood_cm2 / lab["ground_area_cm2"] * 1000
     return out
