@@ -257,6 +257,8 @@ def build_model(params: Dict[str, Any], sim_cfg: Dict[str, Any], weather: Dict[s
     cs_init = np.array(params["cs_init"], dtype=float)
 
     species_obj = getattr(species_traits, sim_cfg["species"])()
+    if params.get("LAI") is not None:
+        species_obj.LAI = float(params["LAI"])
     zr_arr = resolve_zr_arr(sim_cfg, params, species_obj)
     species_obj.GPMAX = species_obj.GPMAX * float(params.get("gpmax_scale", 1.0))
     species_obj.VWT = float(params["VWT"])

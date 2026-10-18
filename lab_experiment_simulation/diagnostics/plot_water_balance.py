@@ -264,6 +264,8 @@ def main(argv: Optional[List[str]] = None) -> Path:
                 if not hasattr(cls, attr):
                     raise KeyError(f"{cls.__name__} has no attribute {attr}")
                 setattr(cls, attr, value)
+                if cls.__name__ == cfg["simulation"]["species"] and attr in cfg["params"]:
+                    cfg["params"][attr] = value
         changes.update(species_overrides)
         changes.update(soil_overrides)
         if args.no_hr:
