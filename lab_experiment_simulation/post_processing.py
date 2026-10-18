@@ -77,7 +77,8 @@ def plot_sap_flux_vs_uptake(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dic
         ax.plot(df.index, _compartment(df, "qs", i), color=common.get("model_color"), lw=linewidth,
                 label=f"Model root uptake $q_{{s,{i + 1}}}$")
         ax.plot(sap.index, sap[side], color=common.get("data_color"), lw=linewidth, marker=".", ms=3,
-                label=f"Sap flux, {side} root ($d$ = {lab['root_diameter_cm'][side]} cm)")
+                label=(f"Sap flux, {side} root" if lab.get("root_area_cm2") else
+                       f"Sap flux, {side} root ($d$ = {lab['root_diameter_cm'][side]} cm)"))
         prefix = f"tree{lab['tree']}_{side}"
         for t, row in irrigation[irrigation[f"{prefix}_vol_liters"] > 0].iterrows():
             ax.axvline(t, color="0.4", ls=":", lw=0.8)

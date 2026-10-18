@@ -67,6 +67,10 @@ class SimulationMultiComp(object):
 			dt=dt
 		)
 		
+		# Diagnostic: drop hydraulic redistribution so a dry compartment is not rewetted.
+		if getattr(self, "clip_negative_qs", False):
+			self.hydro.qs = np.maximum(np.atleast_1d(self.hydro.qs), 0.0)
+
 		# Store qs values for each compartment
 		for i in range(self.num_compartments):
 			self.qs_a[i].append(self.hydro.qs[i])

@@ -3,7 +3,7 @@
 Diagnostic plot of the plant water balance for a lab simulation batch.
 
 Stacked panels share the time axis (burn-in shaded):
-    1. Relative soil moisture s per compartment, with measured VWC / porosity
+    1. Relative soil moisture s per compartment, with shallow and deep VWC / porosity
     2. Water potentials: soil (psi_s), root base (psi_b), xylem (psi_x), leaf (psi_l)
     3. Soil-root conductance gsr per compartment (log scale)
     4. Water fluxes: transpiration, root water uptake and storage fluxes
@@ -11,9 +11,10 @@ Stacked panels share the time axis (burn-in shaded):
 Storage fluxes are positive when storage discharges into the xylem and negative
 when it refills. With flux closure, qs_total = E - qw_stem - qw_leaf.
 
-By default the time series is read from a saved batch. With ``--set`` and/or
-``--s-init-scale``, the model is instead re-run in memory with those parameter
-overrides or scaled initial soil moisture (nothing is saved to results/). Figures go to ``diagnostics/figures/<label>/`` with a ``settings.yaml``
+By default the time series is read from a saved batch. With ``--set``,
+``--s-init-scale``, ``--species-set`` or ``--soil-set``, the model is instead re-run
+in memory with those parameter overrides, scaled initial soil moisture or species /
+soil texture attribute overrides (nothing is saved to results/). Figures go to ``diagnostics/figures/<label>/`` with a ``settings.yaml``
 recording the batch or overrides used.
 
 Usage (from the repo root):
@@ -44,6 +45,7 @@ sys.path.insert(0, str(REPO_ROOT / "sensitivity_analysis"))
 sys.path.append(str(DIAG_DIR.parent))  # after sensitivity_analysis/ so its post_processing wins
 
 import soil
+import species_traits
 from post_processing import _save, set_plot_style  # sensitivity_analysis/post_processing.py
 import run_simulation
 from run_simulation import simulate
@@ -75,13 +77,32 @@ def compartment(df: pd.DataFrame, variable: str, i: int) -> np.ndarray:
 
 
 def measured_s(lab: Dict[str, Any], porosity: float) -> pd.DataFrame:
-    """Measured relative soil moisture per side: mean of shallow and deep VWC probes / porosity."""
+    """Measured relative soil moisture: each side's shallow and deep VWC probes divided by porosity.
+
+    Columns are ``{side}_shallow`` and ``{side}_deep``.
+    """
     df = pd.read_csv(REPO_ROOT / lab["vwc_file"], parse_dates=["datetime"]).set_index("datetime").sort_index()
     out = pd.DataFrame(index=df.index)
     for side in lab["sides"]:
-        cols = [f"tree{lab['tree']}_{side}_{depth}" for depth in ("shallow", "deep")]
-        out[side] = df[cols].mean(axis=1) / porosity
+        for depth in ("shallow", "deep"):
+            out[f"{side}_{depth}"] = df[f"tree{lab['tree']}_{side}_{depth}"] / porosity
     return out
+
+
+def daily_water_mm(flux: pd.Series) -> pd.Series:
+    """Integrate a ground-area flux (µm/s) to mm of water on each calendar day.
+
+    Each sample is taken to cover the interval since the previous sample. A timestamp
+    at midnight belongs to the day that just ended.
+    """
+    flux = flux.dropna().sort_index()
+    if len(flux) < 2:
+        return pd.Series(dtype=float)
+    dt = flux.index.to_series().diff().dt.total_seconds()
+    dt.iloc[0] = dt.iloc[1]
+    depth_mm = flux.to_numpy() * dt.to_numpy() / 1000.0
+    day = (flux.index - pd.Timedelta(seconds=1)).normalize()
+    return pd.Series(depth_mm, index=day).groupby(level=0).sum()
 
 
 def parse_overrides(items: List[str]) -> Dict[str, Any]:
@@ -124,7 +145,10 @@ def plot_water_balance(df: pd.DataFrame, cfg: Dict[str, Any], out_path: Path, su
     for i, side in enumerate(sides):
         c = SIDE_COLORS[i % len(SIDE_COLORS)]
         ax_s.plot(t, compartment(df, "s", i), color=c, lw=1.2, label=f"Model $s_{i + 1}$ ({side})")
-        ax_s.plot(obs.index, obs[side], color=c, lw=0.8, ls=":", label=f"Measured VWC/$n$ ({side})")
+        ax_s.plot(obs.index, obs[f"{side}_shallow"], color=c, lw=0.8, ls=":",
+                  label=f"Shallow VWC/$n$ ({side})")
+        ax_s.plot(obs.index, obs[f"{side}_deep"], color=c, lw=0.8, ls="--",
+                  label=f"Deep VWC/$n$ ({side})")
         ax_psi.plot(t, compartment(df, "psi_s", i), color=c, lw=1.2, label=f"$\\psi_{{s,{i + 1}}}$ ({side})")
         ax_g.plot(t, compartment(df, "gsr", i), color=c, lw=1.2, label=f"$g_{{sr,{i + 1}}}$ ({side})")
         ax_q.plot(t, compartment(df, "qs", i), color=c, lw=1.0, ls="--", label=f"$q_{{s,{i + 1}}}$ ({side})")
@@ -161,6 +185,38 @@ def plot_water_balance(df: pd.DataFrame, cfg: Dict[str, Any], out_path: Path, su
     return _save(fig, out_path, {"dpi": 200})
 
 
+def plot_daily_uptake(df: pd.DataFrame, cfg: Dict[str, Any], out_path: Path, subtitle: str = "") -> Path:
+    """Bar chart of daily root uptake against daily sap flux (mm of water), one panel per side.
+
+    Burn-in steps are dropped. Both fluxes are ground-area rates integrated over each calendar day.
+    Negative root uptake is left out of the daily total; it still appears on the time-series plots.
+    """
+    lab = cfg["lab"]
+    compared = df[~df["is_burn_in"].to_numpy()]
+    sap = run_simulation.lab_inputs.sap_flux_ground_basis(lab)
+    sap = sap[(sap.index >= compared.index[0]) & (sap.index <= compared.index[-1])]
+
+    fig, axes = plt.subplots(len(lab["sides"]), 1, figsize=(10, 6), sharex=True)
+    for i, (ax, side) in enumerate(zip(np.atleast_1d(axes), lab["sides"])):
+        rwu = daily_water_mm(pd.Series(compartment(compared, "qs", i), index=compared.index).clip(lower=0))
+        measured = daily_water_mm(sap[side])
+        days = rwu.index.union(measured.index).sort_values()
+        x = mdates.date2num(days)
+        width = 0.35
+        color = SIDE_COLORS[i % len(SIDE_COLORS)]
+        ax.bar(x - width / 2, rwu.reindex(days), width=width, color=color, label="Model root uptake")
+        ax.bar(x + width / 2, measured.reindex(days), width=width, color=color, alpha=0.4, label="Sap flux")
+        ax.set_ylabel("Daily total (mm)\n(uptake < 0 excluded)")
+        ax.set_title(f"{side} side")
+        ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize="small", frameon=False)
+    axes[-1].xaxis_date()
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+    axes[-1].set_xlabel("Date (2026)")
+    title = f"{cfg['simulation']['name']}: daily root uptake vs sap flux"
+    fig.suptitle(f"{title}\n{subtitle}" if subtitle else title)
+    return _save(fig, out_path, {"dpi": 200})
+
+
 def main(argv: Optional[List[str]] = None) -> Path:
     """Plot the water balance diagnostic for one batch."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -174,6 +230,14 @@ def main(argv: Optional[List[str]] = None) -> Path:
                         help="Also save the root uptake vs sap flux figure (post_processing.py style, burn-in dropped)")
     parser.add_argument("--s-init-scale", type=float, default=1.0,
                         help="Re-run in memory with the data-derived initial soil moisture multiplied by this factor")
+    parser.add_argument("--species-set", nargs="+", default=[], metavar="ATTR=VALUE",
+                        help="Re-run in memory with these species class attributes overridden (e.g. LAI=3)")
+    parser.add_argument("--soil-set", nargs="+", default=[], metavar="ATTR=VALUE",
+                        help="Re-run in memory with these soil texture class attributes overridden (e.g. KS=10, cm/day)")
+    parser.add_argument("--root-area", nargs="+", default=[], metavar="SIDE=CM2",
+                        help="Sapwood area per side for the sap flux comparison (e.g. left=2.65 right=1.57)")
+    parser.add_argument("--no-hr", action="store_true",
+                        help="Clip root uptake at zero so hydraulic redistribution does not rewet a compartment")
     parser.add_argument("--label", help="Figure subfolder under figures/ (default: 'baseline', or the overrides with --set)")
     args = parser.parse_args(argv)
 
@@ -182,7 +246,7 @@ def main(argv: Optional[List[str]] = None) -> Path:
         cfg = yaml.safe_load(f)
     set_plot_style(10)
 
-    if args.set or args.s_init_scale != 1.0:
+    if args.set or args.s_init_scale != 1.0 or args.species_set or args.soil_set or args.no_hr:
         overrides = parse_overrides(args.set)
         unknown = set(overrides) - set(cfg["params"])
         if unknown:
@@ -192,17 +256,36 @@ def main(argv: Optional[List[str]] = None) -> Path:
         if args.s_init_scale != 1.0:
             scale_initial_s(args.s_init_scale)
             changes["s_init_scale"] = args.s_init_scale
+        species_overrides = parse_overrides(args.species_set)
+        soil_overrides = parse_overrides(args.soil_set)
+        for cls, class_overrides in [(getattr(species_traits, cfg["simulation"]["species"]), species_overrides),
+                                     (getattr(soil, cfg["simulation"]["soil_texture"]), soil_overrides)]:
+            for attr, value in class_overrides.items():
+                if not hasattr(cls, attr):
+                    raise KeyError(f"{cls.__name__} has no attribute {attr}")
+                setattr(cls, attr, value)
+        changes.update(species_overrides)
+        changes.update(soil_overrides)
+        if args.no_hr:
+            cfg["params"]["clip_negative_uptake"] = True
+            changes["no_hr"] = True
         print(f"Running in memory with {changes}")
         df = simulate(cfg)
         label = args.label or "_".join(f"{k}={v}" for k, v in changes.items()).replace(" ", "")
         subtitle = "In-memory run: " + ", ".join(f"{k} = {v}" for k, v in changes.items())
-        source = {"source": "in-memory run of config", "overrides": overrides, "s_init_scale": args.s_init_scale}
+        source = {"source": "in-memory run of config", "overrides": overrides, "s_init_scale": args.s_init_scale,
+                  "species_overrides": species_overrides, "soil_overrides": soil_overrides,
+                  "no_hr": bool(args.no_hr),
+                  "root_area_cm2": parse_overrides(args.root_area) or None,
+                  "soil_KS_cm_per_day": getattr(soil, cfg["simulation"]["soil_texture"]).KS}
     else:
         batch_dir = resolve_batch_dir(config_path.parent / "results", args.batch)
         df = pd.read_csv(batch_dir / "timeseries" / f"{cfg['simulation']['name']}.csv", parse_dates=["datetime"])
         label = args.label or "baseline"
         subtitle = f"Batch {batch_dir.name}"
         source = {"source": "saved batch", "batch": batch_dir.name}
+    if args.root_area:
+        cfg["lab"]["root_area_cm2"] = parse_overrides(args.root_area)
     df = df.set_index("datetime")
 
     out_dir = DIAG_DIR / "figures" / label
@@ -217,6 +300,8 @@ def main(argv: Optional[List[str]] = None) -> Path:
     suffix = f"_{args.start or 'start'}_{args.end or 'end'}" if (args.start or args.end) else ""
     path = plot_water_balance(df, cfg, out_dir / f"water_balance{suffix}.png", subtitle)
     print(f"Saved {path.relative_to(REPO_ROOT)}")
+    daily_path = plot_daily_uptake(df, cfg, out_dir / f"daily_uptake_vs_sap_flux{suffix}.png", subtitle)
+    print(f"Saved {daily_path.relative_to(REPO_ROOT)}")
 
     if args.sap_flux:
         lab_pp = load_lab_post_processing()

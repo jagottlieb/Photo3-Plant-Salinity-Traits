@@ -62,6 +62,10 @@ params:
   kr: 1.0e-8              # root radial permeability (m/s)
   F_CAP: 0.5              # relative position of the stem storage node along the hydraulic path (-)
 
+  # Soil water losses besides root uptake
+  drainage: false         # gravity drainage (soil leak) out of the compartment; off for containers
+  soil_evaporation: true  # bare-soil evaporation from the compartment surface
+
   # Salt and conductance
   salt_uptake: true
   dynamic_E: true         # E rises from its set value toward 1 as c_stem approaches c_stem_max

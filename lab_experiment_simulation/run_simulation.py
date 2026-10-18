@@ -71,6 +71,7 @@ def run_lab_simulation(model: Dict[str, Any], params: Dict[str, Any], weather: D
     n_steps, burn_in_steps = times["n_steps"], times["burn_in_steps"]
     n_comp = len(plant.soil.s)
 
+    plant.clip_negative_qs = bool(params.get("clip_negative_uptake", False))
     plant.soil.dynamics = [ConstantSoil() for _ in range(n_comp)]
     hydro.Salt_Uptake = False
     progress_stride = max(1, n_steps // 4)

@@ -1,0 +1,5 @@
+config: lab_experiment_simulation\config.yaml
+source: in-memory run of config
+overrides:
+  drainage: false
+s_init_scale: 1.0

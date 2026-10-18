@@ -8,7 +8,9 @@ class DrydownSoil(object):
 	def __init__(self):
 		pass
 	def snew(self, soil, dt, zr, qs):
-		new_s = (dt/(soil.N*zr*10.**6)*(-qs - (soil.evap(soil.s)*1000.)/(24.*60*60)- soil.leak(soil.s))) + soil.s
+		evap = soil.evap(soil.s) if getattr(soil, 'soil_evaporation', True) else 0.
+		leak = soil.leak(soil.s) if getattr(soil, 'drainage', True) else 0.
+		new_s = (dt/(soil.N*zr*10.**6)*(-qs - (evap*1000.)/(24.*60*60)- leak)) + soil.s
 		# Clamp to physical range to prevent negative moisture
 		return float(np.clip(new_s, 1e-9, 1.0))
 
@@ -90,7 +92,9 @@ class SaltySoil(object):
 class SoilMultiple(object):
 	EVMAX = 3
 	SY = 0.2
-	def __init__(self, stype, dynamics, zr, s, cs=None):
+	def __init__(self, stype, dynamics, zr, s, cs=None, drainage=True, soil_evaporation=True):
+		self.drainage = drainage  # DrydownSoil: include leak as drainage loss
+		self.soil_evaporation = soil_evaporation  # DrydownSoil: include soil evaporation loss
 		self.s = np.atleast_1d(s)
 		self.ZR = np.atleast_1d(zr)
 		# stype can be array or single
@@ -230,8 +234,8 @@ class SaltySoilMultiple(SoilMultiple):
 	IV = 2.
 	E = 0.92
 	SY = 0.5
-	def __init__(self, stype, dynamics, zr, s, cs):
-		super().__init__(stype, dynamics, zr, s)
+	def __init__(self, stype, dynamics, zr, s, cs, drainage=True, soil_evaporation=True):
+		super().__init__(stype, dynamics, zr, s, drainage=drainage, soil_evaporation=soil_evaporation)
 		self.cs = np.atleast_1d(cs)
 		if len(self.cs) == 1 and len(self.s) > 1:
 			self.cs = np.array([self.cs[0] for _ in self.s])
@@ -342,10 +346,10 @@ class Berger(object):
 	VG_M = 1 - 1/VG_N
 	L = 0.5   # pore-connectivity/tortuosity parameter
 	N = 0.8   # measured porosity; relative saturation s = theta/N
-	# Unused (Van Genuchten/Mualem used instead); kept so generic soil-type lookups don't fail
+	KS = 100.   # saturated hydraulic conductivity (cm/day, as for all textures); used by leak()
+	# Unused (Van Genuchten used instead); kept so generic soil-type lookups don't fail
 	PSI_SS = None
 	B = None
-	KS = 1.
 	SH = .15
 	def __init__(self):
 		pass

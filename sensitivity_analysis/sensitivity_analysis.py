@@ -283,6 +283,8 @@ def build_model(params: Dict[str, Any], sim_cfg: Dict[str, Any], weather: Dict[s
         zr=zr_arr,
         s=np.array(params["s_init"], dtype=float),
         cs=cs_init.copy(),
+        drainage=bool(params.get("drainage", True)),
+        soil_evaporation=bool(params.get("soil_evaporation", True)),
     )
     photo_obj = C3_c_leaf_reduc(
         species_obj,
