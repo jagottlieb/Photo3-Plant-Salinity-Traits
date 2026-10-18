@@ -10,12 +10,13 @@
 simulation:
   name: tree1                         # time series file name: timeseries/<name>.csv
   species: Pecan                      # class name in species_traits.py
-  weather_file: data/weather_data/lab_weather_data/Lab_Weather_Summer_Average_Day_30min.xlsx   # average summer day repeated, starts at midnight
+  weather_file: data/weather_data/lab_weather_data/Lab_Weather_Joined_Interp30_throughOct17.xlsx   # 30-min lab weather; the run uses the burn-in start onward
   timestepM: 30                       # model timestep (min)
   start_date: 2026-08-04              # first day compared with data (00:00)
   end_date: 2026-08-12                # last day compared with data (inclusive)
   burn_in_days: 3                     # before start_date: soil held at initial values, no salt uptake
   soil_texture: Berger                # class name in soil.py; its porosity N converts VWC to s
+  soil_formulation: van_genuchten    # Berger only: van_genuchten or clapp_hornberger
   psi_wf_mode: bartlett               # storage psi_w formulation (stem and leaf)
   gwmax_mode: equation                # equation: GWMAX from VWT and species CAP; manual: use params.GWMAX_manual
 

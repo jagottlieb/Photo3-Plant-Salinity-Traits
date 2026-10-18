@@ -337,8 +337,17 @@ class Clay(object):
 		pass
 
 class Berger(object):
-	"""Berger soil texture: Van Genuchten retention curve, Mualem unsaturated hydraulic conductivity."""
+	"""Berger soil texture. FORMULATION selects van Genuchten/Mualem or Clapp-Hornberger.
+
+	VAN_GENUCHTEN stays True so SoilMultiple always calls these methods; the
+	branch is FORMULATION, not that flag. ``"van_genuchten"`` uses the Hyprop
+	Mualem fit. ``"clapp_hornberger"`` uses K = CH_KS * s^(2B+3) and
+	psi = PSI_SS * s^(-B). B and CH_KS are the log-K fit to the Hyprop
+	conductivity points (N fixed). PSI_SS is the log fit of that same B to the
+	Hyprop retention points.
+	"""
 	VAN_GENUCHTEN = True
+	FORMULATION = "van_genuchten"  # "van_genuchten" or "clapp_hornberger"
 	TH_R = 0.155
 	TH_S = 0.807
 	ALPHA = 0.0502   # 1/cm
@@ -346,26 +355,37 @@ class Berger(object):
 	VG_M = 1 - 1/VG_N
 	L = 1.268   # Mualem pore-connectivity/tortuosity parameter; used by leak()
 	N = 0.8     # measured porosity; relative saturation s = theta/N
-	KS = 6400.  # saturated hydraulic conductivity (cm/day, as for all textures); used by leak()
-	# PSI_SS and B are the Clapp-Hornberger parameters. Berger does not use them:
-	# psi_s() uses Van Genuchten and leak() uses Mualem. Kept so generic soil-type lookups don't fail.
-	PSI_SS = None
-	B = None
+	KS = 6400.  # Mualem saturated hydraulic conductivity (cm/day); van Genuchten leak()
+	CH_KS = 484.3  # Clapp-Hornberger saturated hydraulic conductivity (cm/day)
+	B = 3.211   # Clapp-Hornberger pore-size index; conductivity fit, also used for psi_s
+	PSI_SS = -7.237e-4  # Clapp-Hornberger saturated matric potential (MPa); retention fit at this B
 	SH = .15    # relative moisture below which soil evaporation is zero; used by evap()
 	def __init__(self):
 		pass
+	def _clapp_hornberger(self):
+		"""True when FORMULATION selects Clapp-Hornberger."""
+		name = str(self.FORMULATION).strip().lower().replace("-", "_")
+		if name in ("clapp_hornberger", "ch"):
+			return True
+		if name in ("van_genuchten", "vg", "mualem"):
+			return False
+		raise ValueError(f"Unknown Berger formulation: {self.FORMULATION}")
 	def psi_s(self, s):
-		"""Van Genuchten matric potential (MPa) from relative soil moisture s = theta/N."""
-		s = np.asarray(s, dtype=float)
-		theta = np.clip(s, 1e-9, None) * self.N
+		"""Matric potential (MPa) from relative soil moisture s = theta/N."""
+		s = np.clip(np.asarray(s, dtype=float), 1e-9, None)
+		if self._clapp_hornberger():
+			return self.PSI_SS * s**(-self.B)
+		theta = s * self.N
 		Se = np.clip((theta - self.TH_R) / (self.TH_S - self.TH_R), 1e-6, 1. - 1e-6)
 		h_cm = (1. / self.ALPHA) * (Se**(-1. / self.VG_M) - 1.)**(1. / self.VG_N)
 		h_kpa = h_cm * 0.0980665  # cm H2O -> kPa
 		return -h_kpa * 1e-3  # kPa -> MPa, negative = suction
 	def leak(self, s):
-		"""Mualem-Van Genuchten unsaturated hydraulic conductivity: K(Se) = Ks*Se^L*[1-(1-Se^(1/m))^m]^2."""
-		s = np.asarray(s, dtype=float)
-		theta = np.clip(s, 1e-9, None) * self.N
+		"""Unsaturated hydraulic conductivity (um/s) from relative soil moisture s."""
+		s = np.clip(np.asarray(s, dtype=float), 1e-9, None)
+		if self._clapp_hornberger():
+			return .11574 * self.CH_KS * s**(2. * self.B + 3.)
+		theta = s * self.N
 		Se = np.clip((theta - self.TH_R) / (self.TH_S - self.TH_R), 1e-6, 1. - 1e-6)
 		k_rel = Se**self.L * (1. - (1. - Se**(1. / self.VG_M))**self.VG_M)**2
-		return .11574*self.KS*k_rel
+		return .11574 * self.KS * k_rel

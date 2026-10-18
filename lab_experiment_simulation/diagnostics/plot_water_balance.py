@@ -268,6 +268,8 @@ def main(argv: Optional[List[str]] = None) -> Path:
                     cfg["params"][attr] = value
         changes.update(species_overrides)
         changes.update(soil_overrides)
+        if "FORMULATION" in soil_overrides:
+            cfg["simulation"]["soil_formulation"] = soil_overrides["FORMULATION"]
         if args.no_hr:
             cfg["params"]["clip_negative_uptake"] = True
             changes["no_hr"] = True

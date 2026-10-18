@@ -99,6 +99,10 @@ def simulate(cfg: Dict[str, Any]) -> pd.DataFrame:
         Output of ``sa.outputs_to_dataframe`` with a leading ``datetime`` column (step end times).
     """
     sim_cfg, lab, params = dict(cfg["simulation"]), cfg["lab"], dict(cfg["params"])
+    texture_cls = getattr(soil, sim_cfg["soil_texture"])
+    formulation = sim_cfg.get("soil_formulation")
+    if formulation is not None and hasattr(texture_cls, "FORMULATION"):
+        texture_cls.FORMULATION = str(formulation).strip().lower().replace("-", "_")
 
     times = model_times(sim_cfg)
     porosity = getattr(soil, sim_cfg["soil_texture"])().N
@@ -108,6 +112,7 @@ def simulate(cfg: Dict[str, Any]) -> pd.DataFrame:
     params["cs_init"] = lab_inputs.initial_cs(lab, times["start"])
     pulses = lab_inputs.pulse_schedule(lab, times["start"], times["end"], porosity, times["step_starts"])
 
+    print(f"Soil formulation: {getattr(texture_cls, 'FORMULATION', 'clapp_hornberger')}")
     print(f"Compartment depth: {zr:.4f} m")
     print(f"Initial s:  {[round(v, 3) for v in params['s_init']]}")
     print(f"Initial cs: {[round(v, 3) for v in params['cs_init']]} mM")
@@ -115,7 +120,9 @@ def simulate(cfg: Dict[str, Any]) -> pd.DataFrame:
         print(f"Pulse {p['time']} (step {step}): ds = {p['ds'].round(4).tolist()}, "
               f"salt = {p['dms'].round(4).tolist()} mol/m2")
 
-    weather = sa.load_weather(REPO_ROOT / sim_cfg["weather_file"], float(sim_cfg["timestepM"]), times["total_days"])
+    weather = sa.load_weather(
+        REPO_ROOT / sim_cfg["weather_file"], float(sim_cfg["timestepM"]), times["total_days"], times["step_starts"][0]
+    )
     model = sa.build_model(params, sim_cfg, weather)
     result = run_lab_simulation(model, params, weather, sim_cfg, times, pulses)
     df = sa.outputs_to_dataframe(result, weather, sim_cfg)

@@ -158,13 +158,15 @@ def create_batch(config_path: Path) -> Path:
 # Model setup and execution
 # ---------------------------------------------------------------------------
 
-def load_weather(path: Path, timestepM: float, total_days: float) -> Dict[str, List[float]]:
+def load_weather(path: Path, timestepM: float, total_days: float, start: Optional[pd.Timestamp] = None) -> Dict[str, List[float]]:
     """Load weather forcing and linearly resample it to the model timestep.
 
     Args:
         path: Excel file with Temperature (C), Relative Humidity (%) and GHI (W/m2).
         timestepM: Model timestep (min).
         total_days: Burn-in plus analysis window (days); must fit in the file.
+        start: If set, and the file has a datetime column, drop rows before this time
+            so the series lines up with the model window.
 
     Returns:
         Dict with ``phi`` (W/m2), ``ta`` (K) and ``qa`` (kg/kg) lists.
@@ -177,6 +179,12 @@ def load_weather(path: Path, timestepM: float, total_days: float) -> Dict[str, L
 
     # Infer source timestep from a datetime column when available; otherwise assume 30 min.
     source_timestepM = 30.0
+    dt_col = next((c for c in ["DateTime", "Datetime", "datetime", "Timestamp", "timestamp", "Time"] if c in df.columns), None)
+    if start is not None and dt_col is not None:
+        t_all = pd.to_datetime(df[dt_col], errors="coerce")
+        df = df.loc[t_all >= pd.Timestamp(start)].reset_index(drop=True)
+        if df.empty:
+            raise ValueError(f"No weather rows at or after {pd.Timestamp(start)}")
     for dt_col in ["DateTime", "Datetime", "datetime", "Timestamp", "timestamp", "Time"]:
         if dt_col in df.columns:
             t = pd.to_datetime(df[dt_col], errors="coerce").dropna()
