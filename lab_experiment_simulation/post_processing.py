@@ -8,7 +8,7 @@ To add a figure type, write a ``plot_*`` function with the same signature and
 register it in ``PLOT_FUNCTIONS`` under its config key.
 
 Usage (from the repo root):
-    python lab_experiment_simulation/post_processing.py lab_experiment_simulation/config.yaml --batch latest
+    python lab_experiment_simulation/post_processing.py lab_experiment_simulation/drydown/config.yaml --batch latest
     python lab_experiment_simulation/post_processing.py <config> --batch 20261009_0900 --only sap_flux_vs_uptake
 """
 
@@ -28,10 +28,12 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "sensitivity_analysis"))
+sys.path.append(str(REPO_ROOT))
 
 from post_processing import _panel_ylim, _save, set_plot_style  # sensitivity_analysis/post_processing.py, first on sys.path
 
 import lab_inputs
+import soil
 
 
 def resolve_batch_dir(config_dir: Path, batch: str) -> Path:
@@ -57,6 +59,54 @@ def load_timeseries(batch_dir: Path, sim_cfg: Dict[str, Any]) -> pd.DataFrame:
 def _compartment(df: pd.DataFrame, variable: str, i: int) -> np.ndarray:
     """Values of a per-compartment variable for compartment ``i`` (0-based)."""
     return np.array([json.loads(cell)[i] for cell in df[variable]])
+
+
+def _legend(ax: plt.Axes, common: Dict[str, Any]) -> None:
+    """Place the panel legend from ``plots.common.legend``."""
+    legend_cfg = common.get("legend", {})
+    ax.legend(loc=legend_cfg.get("loc", "upper left"), bbox_to_anchor=legend_cfg.get("bbox_to_anchor", [1.01, 1.0]),
+              fontsize=legend_cfg.get("fontsize", "small"), frameon=legend_cfg.get("frameon", False))
+
+
+def _finish(fig: plt.Figure, axes: np.ndarray, plot_cfg: Dict[str, Any], common: Dict[str, Any],
+            out_dir: Path, stem: str) -> Path:
+    """Date axis, optional figure title, and save."""
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+    axes[-1].set_xlabel("Date (2026)")
+    title = plot_cfg.get("title")
+    if title:
+        fig.suptitle(title)
+    return _save(fig, out_dir / f"{stem}.{common.get('format', 'png')}", common)
+
+
+def daily_water_mm(flux: pd.Series) -> pd.Series:
+    """Integrate a ground-area flux (µm/s) to mm of water on each calendar day.
+
+    Each sample is taken to cover the interval since the previous sample. A timestamp
+    at midnight belongs to the day that just ended.
+    """
+    flux = flux.dropna().sort_index()
+    if len(flux) < 2:
+        return pd.Series(dtype=float)
+    dt = flux.index.to_series().diff().dt.total_seconds()
+    dt.iloc[0] = dt.iloc[1]
+    depth_mm = flux.to_numpy() * dt.to_numpy() / 1000.0
+    day = (flux.index - pd.Timedelta(seconds=1)).normalize()
+    return pd.Series(depth_mm, index=day).groupby(level=0).sum()
+
+
+def measured_relative_water(lab: Dict[str, Any], porosity: float) -> pd.DataFrame:
+    """Measured relative water content: each side's shallow and deep VWC divided by porosity.
+
+    Columns are ``{side}_shallow`` and ``{side}_deep``. This is the same ``s = theta / n``
+    the model stores.
+    """
+    df = pd.read_csv(REPO_ROOT / lab["vwc_file"], parse_dates=["datetime"]).set_index("datetime").sort_index()
+    out = pd.DataFrame(index=df.index)
+    for side in lab["sides"]:
+        for depth in ("shallow", "deep"):
+            out[f"{side}_{depth}"] = df[f"tree{lab['tree']}_{side}_{depth}"] / porosity
+    return out
 
 
 def plot_sap_flux_vs_uptake(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, Any],
@@ -91,19 +141,83 @@ def plot_sap_flux_vs_uptake(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dic
         ylim = _panel_ylim(plot_cfg.get("ylim"), i)
         if ylim is not None:
             ax.set_ylim(ylim)
-        legend_cfg = common.get("legend", {})
-        ax.legend(loc=legend_cfg.get("loc", "upper left"), bbox_to_anchor=legend_cfg.get("bbox_to_anchor", [1.01, 1.0]),
-                  fontsize=legend_cfg.get("fontsize", "small"), frameon=legend_cfg.get("frameon", False))
+        _legend(ax, common)
 
-    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
-    axes[-1].set_xlabel("Date (2026)")
-    fig.suptitle(plot_cfg.get("title", ""))
-    return _save(fig, out_dir / f"sap_flux_vs_uptake.{common.get('format', 'png')}", common)
+    return _finish(fig, axes, plot_cfg, common, out_dir, "sap_flux_vs_uptake")
+
+
+def plot_daily_uptake_vs_sap_flux(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, Any],
+                                  common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: daily root uptake against daily sap flux (mm of water), one panel per side.
+
+    Both fluxes are ground-area rates. Negative root uptake is left out of the daily total;
+    it still appears on the sap-flux time series.
+    """
+    lab = cfg["lab"]
+    sap = lab_inputs.sap_flux_ground_basis(lab)
+    sap = sap[(sap.index >= df.index[0]) & (sap.index <= df.index[-1])]
+    titles = plot_cfg.get("panel_titles") or lab["sides"]
+    width, height = common.get("figsize", [9, 3.0])
+
+    fig, axes = plt.subplots(len(lab["sides"]), 1, figsize=(width, height * len(lab["sides"])), sharex=True)
+    for i, (ax, side) in enumerate(zip(np.atleast_1d(axes), lab["sides"])):
+        rwu = daily_water_mm(pd.Series(_compartment(df, "qs", i), index=df.index).clip(lower=0))
+        measured = daily_water_mm(sap[side])
+        days = rwu.index.union(measured.index).sort_values()
+        x = mdates.date2num(days)
+        bar_width = 0.35
+        ax.bar(x - bar_width / 2, rwu.reindex(days), width=bar_width, color=common.get("model_color"),
+               label="Model root uptake")
+        ax.bar(x + bar_width / 2, measured.reindex(days), width=bar_width, color=common.get("data_color"),
+               alpha=0.85, label="Sap flux")
+        ax.set_title(titles[i], fontsize="medium")
+        ax.set_ylabel(plot_cfg.get("ylabel", "Daily total (mm)"))
+        ylim = _panel_ylim(plot_cfg.get("ylim"), i)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        _legend(ax, common)
+    axes[-1].xaxis_date()
+    return _finish(fig, axes, plot_cfg, common, out_dir, "daily_uptake_vs_sap_flux")
+
+
+def plot_relative_water_content(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, Any],
+                                common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: modeled relative water content against shallow and deep probe values.
+
+    One panel per side. Measured series are volumetric water content divided by porosity,
+    the same relative water content ``s`` the model reports for that compartment.
+    """
+    sim_cfg, lab = cfg["simulation"], cfg["lab"]
+    porosity = getattr(soil, sim_cfg["soil_texture"])().N
+    obs = measured_relative_water(lab, porosity)
+    obs = obs[(obs.index >= df.index[0]) & (obs.index <= df.index[-1])]
+    titles = plot_cfg.get("panel_titles") or lab["sides"]
+    linewidth = float(common.get("linewidth", 1.2))
+    data_color = common.get("data_color")
+    width, height = common.get("figsize", [9, 3.0])
+
+    fig, axes = plt.subplots(len(lab["sides"]), 1, figsize=(width, height * len(lab["sides"])), sharex=True)
+    for i, (ax, side) in enumerate(zip(np.atleast_1d(axes), lab["sides"])):
+        ax.plot(df.index, _compartment(df, "s", i), color=common.get("model_color"), lw=linewidth,
+                label="Model $s$")
+        ax.plot(obs.index, obs[f"{side}_shallow"], color=data_color, lw=linewidth, ls=":",
+                label="Shallow")
+        ax.plot(obs.index, obs[f"{side}_deep"], color=data_color, lw=linewidth, ls="--",
+                label="Deep")
+        ax.set_title(titles[i], fontsize="medium")
+        ax.set_ylabel(plot_cfg.get("ylabel", "Relative water content $s$ (-)"))
+        ylim = _panel_ylim(plot_cfg.get("ylim"), i)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        _legend(ax, common)
+    return _finish(fig, axes, plot_cfg, common, out_dir, "relative_water_content")
 
 
 # Config ``plots`` key -> plotting function.
 PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "sap_flux_vs_uptake": plot_sap_flux_vs_uptake,
+    "daily_uptake_vs_sap_flux": plot_daily_uptake_vs_sap_flux,
+    "relative_water_content": plot_relative_water_content,
 }
 
 

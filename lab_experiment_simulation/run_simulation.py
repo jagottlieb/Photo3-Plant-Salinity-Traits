@@ -7,12 +7,15 @@ irrigation and salt additions are applied as pulses (see ``lab_inputs.py``).
 Model building, weather loading and batch bookkeeping are shared with
 ``sensitivity_analysis/sensitivity_analysis.py``. Every execution creates:
 
-    results/<batch_id>/
+    <scenario>/results/<batch_id>/
         config.yaml               frozen copy of the config plus batch metadata
         timeseries/<name>.csv     every model output variable, with a datetime column
 
+The scenario folder is the directory that holds the config (for example
+``lab_experiment_simulation/drydown``).
+
 Usage (from the repo root):
-    python lab_experiment_simulation/run_simulation.py lab_experiment_simulation/config.yaml
+    python lab_experiment_simulation/run_simulation.py lab_experiment_simulation/drydown/config.yaml
 """
 
 import argparse

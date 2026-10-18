@@ -1,0 +1,10 @@
+config: lab_experiment_simulation\drydown\config.yaml
+source: in-memory run of config
+overrides: {}
+s_init_scale: 1.0
+species_overrides: {}
+soil_overrides:
+  FORMULATION: clapp_hornberger
+no_hr: false
+root_area_cm2: null
+soil_KS_cm_per_day: 6400.0

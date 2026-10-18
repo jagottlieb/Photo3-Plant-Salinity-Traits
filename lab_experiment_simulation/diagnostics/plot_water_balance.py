@@ -14,11 +14,12 @@ when it refills. With flux closure, qs_total = E - qw_stem - qw_leaf.
 By default the time series is read from a saved batch. With ``--set``,
 ``--s-init-scale``, ``--species-set`` or ``--soil-set``, the model is instead re-run
 in memory with those parameter overrides, scaled initial soil moisture or species /
-soil texture attribute overrides (nothing is saved to results/). Figures go to ``diagnostics/figures/<label>/`` with a ``settings.yaml``
-recording the batch or overrides used.
+soil texture attribute overrides (nothing is saved to results/). Figures go to
+``<scenario>/diagnostics/figures/<label>/`` (the scenario folder is the one
+holding the config) with a ``settings.yaml`` recording the batch or overrides used.
 
 Usage (from the repo root):
-    python lab_experiment_simulation/diagnostics/plot_water_balance.py lab_experiment_simulation/config.yaml
+    python lab_experiment_simulation/diagnostics/plot_water_balance.py lab_experiment_simulation/drydown/config.yaml
     python lab_experiment_simulation/diagnostics/plot_water_balance.py <config> --batch 20261009_0817 --start 2026-08-05 --end 2026-08-08
     python lab_experiment_simulation/diagnostics/plot_water_balance.py <config> --set VWT=1e-6 --label stem_storage_off --sap-flux
 """
@@ -292,7 +293,7 @@ def main(argv: Optional[List[str]] = None) -> Path:
         cfg["lab"]["root_area_cm2"] = parse_overrides(args.root_area)
     df = df.set_index("datetime")
 
-    out_dir = DIAG_DIR / "figures" / label
+    out_dir = config_path.parent / "diagnostics" / "figures" / label
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "settings.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump({"config": str(config_path.relative_to(REPO_ROOT)), **source}, f, sort_keys=False)
@@ -312,7 +313,8 @@ def main(argv: Optional[List[str]] = None) -> Path:
         plots_cfg = cfg.get("plots", {})
         common = plots_cfg.get("common", {})
         plot_cfg = dict(plots_cfg.get("sap_flux_vs_uptake", {}))
-        plot_cfg["title"] = f"{plot_cfg.get('title', '')}\n{subtitle}"
+        base_title = plot_cfg.get("title") or ""
+        plot_cfg["title"] = f"{base_title}\n{subtitle}".strip()
         sap_path = lab_pp.plot_sap_flux_vs_uptake(df[~df["is_burn_in"]], cfg, plot_cfg, common, out_dir)
         if suffix:
             sap_path = sap_path.replace(sap_path.with_name(f"{sap_path.stem}{suffix}{sap_path.suffix}"))

@@ -15,6 +15,11 @@ alwaysApply: true
   - "Phase N - name/" folders hold config.yaml and results/<batch_id>/
     (only each batch's frozen config.yaml is tracked); they may also hold
     diagnostics/ and extra_plots/ scripts used to tune or explain the phase
+- lab_experiment_simulation/: runs against measured lab weather and soil
+  - run_simulation.py, post_processing.py, lab_inputs.py, and diagnostics/ scripts are shared
+  - each scenario folder (drydown/, and later a salt treatment) holds config.yaml,
+    results/<batch_id>/, and diagnostics/ figure runs
+    (only each batch's frozen config.yaml is tracked)
 - data/: weather_data/, soil_data/, sap_flux/, literature_data/ inputs and helper notebooks;
   processing scripts sit beside their data and write processed CSVs/figures
   into the data subfolder they read from (e.g. soil_data/vwc_data/)
