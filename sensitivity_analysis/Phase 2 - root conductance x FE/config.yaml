@@ -13,7 +13,7 @@ phase:
   description: >
     Full factorial of root radial permeability kr and filtration
     efficiency E at low/med/high levels, with salt uptake and dynamic E on,
-    with 100 mM salt in both compartments, held wet (S5) or drying down (S4).
+    with 100 mM salt in both compartments, soil held wet.
 
 simulation:
   species: Pecan                      # class name in species_traits.py
@@ -22,6 +22,7 @@ simulation:
   burn_in_days: 7                     # soil held constant, no salt uptake
   analysis_days: 30                   # window after burn-in; total = 37 days (weather allows up to 38)
   zr_arr: species                     # compartment depths (m); "species" = species ZR per compartment, or a list
+  soil_texture: SandyLoam             # class name in soil.py (e.g. Berger, SandyLoam, Loam)
   psi_wf_mode: bartlett               # storage psi_w formulation (stem and leaf)
   gwmax_mode: equation                # equation: GWMAX from VWT and species CAP; manual: use baseline.GWMAX_manual
   enable_post_burn_cs_reset: true     # apply scenario post_burn_cs at end of burn-in
@@ -68,12 +69,6 @@ baseline:
 
 # Scenario keys override baseline; post_burn_* keys control the soil after burn-in.
 scenarios:
-  S4:
-    label: Salt both, drydown
-    s_init: [0.45, 0.45]
-    cs_init: [100.0, 100.0]
-    post_burn_cs: [100.0, 100.0]
-    post_burn_soil_dynamics: [drydown, drydown]
   S5:
     label: Salt both, wet
     s_init: [0.45, 0.45]
@@ -81,9 +76,9 @@ scenarios:
     post_burn_cs: [100.0, 100.0]
     post_burn_soil_dynamics: [constant, constant]
 
-# S4 and S5 both start at 100 mM in both compartments. S4 dries both after burn-in; soil salt mass is
-# fixed, so cs rises as s falls. (Before batch 20261007_2019, S4 had 100 mM in compartment 2 only, held wet.)
-active_scenarios: [S4, S5]
+# 100 mM in both compartments, soil moisture held constant after burn-in.
+# Drydown (S4) was dropped for this phase after batch 20261018_1600.
+active_scenarios: [S5]
 
 # Each run overrides baseline keys; every run is repeated for each active scenario.
 # `group` splits the figures: figures/<scenario>/<group>/.
@@ -146,14 +141,22 @@ plots:
 
   leaf_salt:
     enabled: true
-    variables: [c_leaf, MW_uptake_leaf]
-    ylabels: ["Leaf storage salt, $c_{leaf}$ (mol m$^{-3}$)", "Cumulative leaf salt uptake (mmol m$^{-2}$)"]
-    scales: [1.0, 1000.0]           # MW_uptake_leaf mol -> mmol
+    variables: [c_leaf]
+    ylabels: ["Leaf storage salt, $c_{leaf}$ (mol m$^{-3}$)"]
     threshold: 12.0                 # c_leaf where photosynthesis reduction starts (C3_c_leaf_reduc)
-    threshold_label: "Reduction threshold"
+    threshold_label: "Onset of\nphotosynthetic\nreduction"
     threshold_panel: 0
     ylim: null
     title: "Leaf salt accumulation"
+    title_context: false            # omit the (scenario, group) suffix
+
+  salt_response_table:              # LaTeX table: 30-day leaf delta pi0 and days to photo reduction
+    enabled: true
+    variable: pi0_leaf
+    onset_variable: photo_reduc
+    onset_threshold: 0.0
+    caption: "30-day leaf osmotic adjustment and days until the onset of photosynthetic reduction"
+    label: "tab:phase2_salt_response"
 
   delta_pi0:                        # change in pi0 from end of burn-in to end of window; hatch = FE level
     enabled: true
@@ -161,7 +164,8 @@ plots:
     panel_titles: ["Leaf storage"]
     ylabel: "$\\Delta\\pi_{0,leaf}$ (MPa)"
     ylim: null
-    title: "Change in osmotic potential at full turgor"
+    title: "30-day osmotic adjustment ($\\Delta\\pi_{0,leaf}$)"
+    title_context: false            # omit the (scenario, group) suffix
 
   transpiration:
     enabled: true

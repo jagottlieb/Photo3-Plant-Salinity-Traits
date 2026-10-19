@@ -112,11 +112,36 @@ def _panel_ylim(ylim: Any, panel_index: int) -> Optional[List[float]]:
 
 
 def _suptitle(plot_cfg: Dict[str, Any], rows: pd.DataFrame) -> str:
-    """Figure title: the block's ``title``, then scenario label and run group (if any)."""
+    """Figure title: the block's ``title``, then scenario label and run group (if any).
+
+    Set ``title_context: false`` on a plot block to keep the title alone.
+    """
+    title = plot_cfg.get("title", "")
+    if plot_cfg.get("title_context", True) is False:
+        return title
     context = [str(rows["scenario_label"].iloc[0])]
     if "group" in rows.columns and pd.notna(rows["group"].iloc[0]):
         context.append(str(rows["group"].iloc[0]))
-    return f"{plot_cfg.get('title', '')} ({', '.join(context)})"
+    return f"{title} ({', '.join(context)})"
+
+
+def _window_delta(df: pd.DataFrame, variable: str, window_days: Optional[List[float]]) -> float:
+    """Value of ``variable`` at the end of the window minus its value at the start.
+
+    With ``window_days`` null, the start is the last burn-in step and the end is the last step.
+    """
+    x = df["days_since_burn_in"]
+    start = df[x <= window_days[0]] if window_days is not None else df[df["is_burn_in"]]
+    end = df[x <= window_days[1]] if window_days is not None else df
+    return float(end[variable].iloc[-1]) - float(start[variable].iloc[-1])
+
+
+def _onset_day(df: pd.DataFrame, variable: str, threshold: float) -> Optional[float]:
+    """Days since end of burn-in when ``variable`` first exceeds ``threshold``, or None."""
+    on = np.flatnonzero(_values(df, variable, None) > threshold)
+    if len(on) == 0:
+        return None
+    return float(df["days_since_burn_in"].iloc[on[0]])
 
 
 def _save(fig: plt.Figure, out_path: Path, common: Dict[str, Any]) -> Path:
@@ -292,11 +317,10 @@ def plot_photosynthesis(manifest: pd.DataFrame, series: SeriesDict, scenario: st
     notes = []
     for row in rows.itertuples():
         df = _window(series[(row.run, scenario)], common.get("window_days"))
-        on = np.flatnonzero(_values(df, onset_var, None) > onset_thr)
-        if len(on) == 0:
+        day = _onset_day(df, onset_var, onset_thr)
+        if day is None:
             notes.append(f"{row.run}: off")
             continue
-        day = float(df["days_since_burn_in"].iloc[on[0]])
         notes.append(f"{row.run}: day {day:.1f}")
         for ax in axes:
             ax.axvline(day, color=colors.get(row.run, "k"), ls="--", lw=0.8, zorder=0)
@@ -312,15 +336,20 @@ def plot_leaf_salt(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
     storage concentration and cumulative salt taken up into the leaf). If
     ``threshold`` is set, a horizontal dotted line is drawn on panel
     ``threshold_panel`` (default 0), e.g. the c_leaf at which photosynthesis
-    reduction starts.
+    reduction starts. ``threshold_label`` is drawn above that line, with a
+    leader down to it. Newlines in the label are kept.
     """
     plot_cfg = {"variables": ["c_leaf", "MW_uptake_leaf"], **plot_cfg}
     fig, axes, _ = _draw_timeseries(manifest, series, scenario, plot_cfg, common, _panels_from_config(plot_cfg))
     if plot_cfg.get("threshold") is not None:
         ax = axes[int(plot_cfg.get("threshold_panel", 0))]
         ax.axhline(float(plot_cfg["threshold"]), color="k", ls=":", lw=0.8)
-        ax.annotate(plot_cfg.get("threshold_label", "Threshold"), (0.005, float(plot_cfg["threshold"])),
-                    xycoords=("axes fraction", "data"), fontsize="x-small", va="bottom")
+        ax.annotate(plot_cfg.get("threshold_label", "Threshold"),
+                    (0.12, float(plot_cfg["threshold"])),
+                    xytext=(0, 64), textcoords="offset points",
+                    xycoords=("axes fraction", "data"),
+                    fontsize="x-small", ha="center", va="bottom", linespacing=1.15,
+                    arrowprops={"arrowstyle": "-", "color": "k", "lw": 0.6, "shrinkA": 0, "shrinkB": 0})
     return _save(fig, out_dir / f"leaf_salt.{common.get('format', 'png')}", common)
 
 
@@ -347,11 +376,7 @@ def plot_delta_pi0(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
     fig, axes = plt.subplots(1, len(variables), figsize=(width, height), squeeze=False)
     for i, (var, ax) in enumerate(zip(variables, axes[0])):
         for j, row in enumerate(rows.itertuples()):
-            df = series[(row.run, scenario)]
-            x = df["days_since_burn_in"]
-            start = df[x <= window[0]] if window is not None else df[df["is_burn_in"]]
-            end = df[x <= window[1]] if window is not None else df
-            delta = float(end[var].iloc[-1]) - float(start[var].iloc[-1])
+            delta = _window_delta(series[(row.run, scenario)], var, window)
             ax.bar(j, delta, width=0.8, color=colors.get(row.run), edgecolor="k", linewidth=0.5,
                    hatch=hatches.get(styles.get(row.run, "-"), ""))
         ax.axhline(0, color="k", lw=0.8)
@@ -596,6 +621,54 @@ def table_daily_storage(manifest: pd.DataFrame, series: SeriesDict, scenario: st
     return out_path
 
 
+def table_salt_response(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                        plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Table type: osmotic adjustment over the window and days to photosynthetic reduction, one row per run.
+
+    Written as a LaTeX table, one file per scenario. Each covaried parameter in the
+    run overrides is its own column, headed by ``plots.common.display_names``.
+    ``plot_cfg`` keys: ``variable`` (default ``pi0_leaf``), ``onset_variable``
+    (default ``photo_reduc``), ``onset_threshold`` (default 0), ``caption``,
+    ``label``. The window is ``plots.common.window_days``. Runs that never switch
+    on are marked ``off``.
+    """
+    rows = manifest[manifest["scenario"] == scenario]
+    variable = plot_cfg.get("variable", "pi0_leaf")
+    onset_var = plot_cfg.get("onset_variable", "photo_reduc")
+    onset_thr = float(plot_cfg.get("onset_threshold", 0.0))
+    window = common.get("window_days")
+    display_names = common.get("display_names", {})
+    caption = plot_cfg.get("caption", "Osmotic adjustment and photosynthetic reduction onset")
+    param_keys = list(json.loads(rows["overrides"].iloc[0]))
+    headers = [display_names.get(k, k) for k in param_keys]
+    headers += [r"$\Delta\pi_{0,\mathrm{leaf}}$ (MPa)", "Days to onset of photosynthesis reduction"]
+
+    lines = [
+        r"\begin{table}[H]",
+        r"\centering",
+        f"\\caption{{{caption}}}",
+        f"\\label{{{plot_cfg.get('label', 'tab:salt_response')}}}",
+        r"\begin{tabular}{" + "c" * len(headers) + "}",
+        r"\hline",
+        " & ".join(headers) + r" \\",
+        r"\hline",
+    ]
+    for row in rows.itertuples():
+        df = series[(row.run, scenario)]
+        overrides = json.loads(row.overrides)
+        delta = _window_delta(df, variable, window)
+        day = _onset_day(_window(df, window), onset_var, onset_thr)
+        onset = "off" if day is None else f"{day:.1f}"
+        cells = [str(overrides[k]) for k in param_keys] + [f"${delta:.3f}$", onset]
+        lines.append(" & ".join(cells) + r" \\")
+    lines += [r"\hline", r"\end{tabular}", r"\end{table}"]
+
+    out_path = out_dir / "salt_response_table.tex"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out_path
+
+
 # Config ``plots`` key -> plotting function.
 PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "transpiration": plot_transpiration,
@@ -607,6 +680,7 @@ PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "photosynthesis": plot_photosynthesis,
     "leaf_salt": plot_leaf_salt,
     "delta_pi0": plot_delta_pi0,
+    "salt_response_table": table_salt_response,
     "daily_transpiration": plot_daily_transpiration,
     "daily_storage": plot_daily_storage,
     "daily_storage_table": table_daily_storage,
