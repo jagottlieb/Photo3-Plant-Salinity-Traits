@@ -26,11 +26,35 @@ def _read_csv(lab: Dict[str, Any], key: str, time_col: str) -> pd.DataFrame:
     return pd.read_csv(REPO_ROOT / lab[key], parse_dates=[time_col]).set_index(time_col).sort_index()
 
 
-def _day_mean(series: pd.Series, date: pd.Timestamp, label: str) -> float:
-    """Mean of ``series`` over one calendar day; error if there is no data that day."""
-    day = series[series.index.normalize() == date.normalize()].dropna()
+def initial_cutoff(lab: Dict[str, Any], date: pd.Timestamp) -> pd.Timestamp | None:
+    """First water or salt pulse on ``date``, when initials should stop before it.
+
+    With ``lab["initial_before_pulses"]`` set, the start-date mean uses only samples
+    from before this time so a same-day addition is not already inside the initial state.
+    """
+    if not lab.get("initial_before_pulses"):
+        return None
+    df = _read_csv(lab, "irrigation_file", "timestamp")
+    day = df[df.index.normalize() == pd.Timestamp(date).normalize()]
+    prefix = f"tree{lab['tree']}"
+    amount_cols = [f"{prefix}_{side}_{kind}" for side in lab["sides"] for kind in ("vol_liters", "moles")]
+    active = day[day[amount_cols].fillna(0).sum(axis=1) > 0]
+    if active.empty:
+        return None
+    return pd.Timestamp(active.index[0])
+
+
+def _day_mean(series: pd.Series, date: pd.Timestamp, label: str, before: pd.Timestamp | None = None) -> float:
+    """Mean of ``series`` over one calendar day; error if that window is empty.
+
+    ``before`` drops samples at or after that time, used when a pulse falls on the start date.
+    """
+    day = series[series.index.normalize() == pd.Timestamp(date).normalize()].dropna()
+    if before is not None:
+        day = day[day.index < before]
     if day.empty:
-        raise ValueError(f"No {label} data on {date.date()}")
+        when = f" before {before}" if before is not None else ""
+        raise ValueError(f"No {label} data on {pd.Timestamp(date).date()}{when}")
     return float(day.mean())
 
 
@@ -42,22 +66,32 @@ def compartment_depth(lab: Dict[str, Any]) -> float:
 def initial_s(lab: Dict[str, Any], date: pd.Timestamp, porosity: float) -> List[float]:
     """Relative soil moisture per compartment from the start-date mean VWC.
 
-    Each side's VWC is the mean of its shallow and deep probes (or the one probe
-    with data), averaged over ``date`` and divided by ``porosity``.
+    Each side's VWC is the mean of the depths in ``lab["vwc_depths"]`` (default
+    shallow and deep), averaged over ``date`` and divided by ``porosity``. With
+    ``initial_before_pulses``, the mean stops before the first pulse that day.
     """
     df = _read_csv(lab, "vwc_file", "datetime")
+    before = initial_cutoff(lab, date)
+    depths = lab.get("vwc_depths", ["shallow", "deep"])
     s = []
     for side in lab["sides"]:
-        cols = [f"tree{lab['tree']}_{side}_{depth}" for depth in ("shallow", "deep")]
-        vwc = _day_mean(df[cols].mean(axis=1), date, f"{side} VWC")
+        cols = [f"tree{lab['tree']}_{side}_{depth}" for depth in depths]
+        vwc = _day_mean(df[cols].mean(axis=1), date, f"{side} VWC", before)
         s.append(vwc / porosity)
     return s
 
 
 def initial_cs(lab: Dict[str, Any], date: pd.Timestamp) -> List[float]:
-    """Soil salinity (mM) per compartment: start-date mean of each side's conductivity probe."""
+    """Soil salinity (mM) per compartment: start-date mean of each side's conductivity probe.
+
+    With ``initial_before_pulses``, the mean stops before the first pulse that day.
+    """
     df = _read_csv(lab, "conductivity_file", "datetime")
-    return [_day_mean(df[lab["conductivity_cols"][side]], date, f"{side} conductivity") for side in lab["sides"]]
+    before = initial_cutoff(lab, date)
+    return [
+        _day_mean(df[lab["conductivity_cols"][side]], date, f"{side} conductivity", before)
+        for side in lab["sides"]
+    ]
 
 
 def pulse_schedule(lab: Dict[str, Any], start: pd.Timestamp, end: pd.Timestamp, porosity: float,

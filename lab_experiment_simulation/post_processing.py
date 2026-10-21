@@ -213,11 +213,83 @@ def plot_relative_water_content(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg:
     return _finish(fig, axes, plot_cfg, common, out_dir, "relative_water_content")
 
 
+def plot_soil_salt(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, Any],
+                   common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: modeled soil salt concentration against measured pore-water concentration.
+
+    One panel per side. Measured values are the pore-water columns named in
+    ``lab.conductivity_cols`` (mM). Dotted lines mark a salt addition.
+    """
+    lab = cfg["lab"]
+    obs = pd.read_csv(REPO_ROOT / lab["conductivity_file"], parse_dates=["datetime"]).set_index("datetime")
+    obs = obs[(obs.index >= df.index[0]) & (obs.index <= df.index[-1])]
+    irrigation = pd.read_csv(REPO_ROOT / lab["irrigation_file"], parse_dates=["timestamp"]).set_index("timestamp")
+    irrigation = irrigation[(irrigation.index >= df.index[0]) & (irrigation.index <= df.index[-1])]
+    titles = plot_cfg.get("panel_titles") or lab["sides"]
+    linewidth = float(common.get("linewidth", 1.2))
+    width, height = common.get("figsize", [9, 3.0])
+
+    fig, axes = plt.subplots(len(lab["sides"]), 1, figsize=(width, height * len(lab["sides"])), sharex=True)
+    for i, (ax, side) in enumerate(zip(np.atleast_1d(axes), lab["sides"])):
+        ax.plot(df.index, _compartment(df, "cs", i), color=common.get("model_color"), lw=linewidth,
+                label="Model soil salt")
+        ax.plot(obs.index, obs[lab["conductivity_cols"][side]], color=common.get("data_color"), lw=linewidth,
+                label="Measured pore water")
+        moles = irrigation[f"tree{lab['tree']}_{side}_moles"]
+        for t, added in moles[moles > 0].items():
+            ax.axvline(t, color="0.4", ls=":", lw=0.8)
+            ax.annotate(f"{added} mol", (t, 1.0), xycoords=("data", "axes fraction"), fontsize="x-small",
+                        ha="left", va="top", rotation=90)
+        ax.set_title(titles[i], fontsize="medium")
+        ax.set_ylabel(plot_cfg.get("ylabel", "Salt concentration (mM)"))
+        ylim = _panel_ylim(plot_cfg.get("ylim"), i)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        _legend(ax, common)
+    return _finish(fig, axes, plot_cfg, common, out_dir, "soil_salt")
+
+
+def plot_matric_potential(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, Any],
+                          common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: modeled matric potential against the Board 9 matric probes.
+
+    Modeled matric potential is the soil retention curve at the modeled relative
+    water content. ``lab.matric_cols`` names the measured column for each side.
+    """
+    sim_cfg, lab = cfg["simulation"], cfg["lab"]
+    texture = getattr(soil, sim_cfg["soil_texture"])()
+    formulation = sim_cfg.get("soil_formulation")
+    if formulation is not None and hasattr(texture, "FORMULATION"):
+        texture.FORMULATION = str(formulation).strip().lower().replace("-", "_")
+    obs = pd.read_csv(REPO_ROOT / lab["conductivity_file"], parse_dates=["datetime"]).set_index("datetime")
+    obs = obs[(obs.index >= df.index[0]) & (obs.index <= df.index[-1])]
+    titles = plot_cfg.get("panel_titles") or lab["sides"]
+    linewidth = float(common.get("linewidth", 1.2))
+    width, height = common.get("figsize", [9, 3.0])
+
+    fig, axes = plt.subplots(len(lab["sides"]), 1, figsize=(width, height * len(lab["sides"])), sharex=True)
+    for i, (ax, side) in enumerate(zip(np.atleast_1d(axes), lab["sides"])):
+        modeled = np.asarray(texture.psi_s(_compartment(df, "s", i)), dtype=float)
+        ax.plot(df.index, modeled, color=common.get("model_color"), lw=linewidth,
+                label="Model matric potential")
+        ax.plot(obs.index, obs[lab["matric_cols"][side]], color=common.get("data_color"), lw=linewidth,
+                label="Measured matric potential")
+        ax.set_title(titles[i], fontsize="medium")
+        ax.set_ylabel(plot_cfg.get("ylabel", "Matric potential (MPa)"))
+        ylim = _panel_ylim(plot_cfg.get("ylim"), i)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        _legend(ax, common)
+    return _finish(fig, axes, plot_cfg, common, out_dir, "matric_potential")
+
+
 # Config ``plots`` key -> plotting function.
 PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "sap_flux_vs_uptake": plot_sap_flux_vs_uptake,
     "daily_uptake_vs_sap_flux": plot_daily_uptake_vs_sap_flux,
     "relative_water_content": plot_relative_water_content,
+    "soil_salt": plot_soil_salt,
+    "matric_potential": plot_matric_potential,
 }
 
 

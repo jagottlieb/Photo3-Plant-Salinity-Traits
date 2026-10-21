@@ -113,12 +113,24 @@ def simulate(cfg: Dict[str, Any]) -> pd.DataFrame:
     sim_cfg["zr_arr"] = [zr] * len(lab["sides"])
     params["s_init"] = lab_inputs.initial_s(lab, times["start"], porosity)
     params["cs_init"] = lab_inputs.initial_cs(lab, times["start"])
+    if lab.get("plant_salt_from_soil"):
+        plant_cs = float(sum(params["cs_init"]) / len(params["cs_init"]))
+        params["c_stem"] = plant_cs
+        params["c_leaf"] = plant_cs
     pulses = lab_inputs.pulse_schedule(lab, times["start"], times["end"], porosity, times["step_starts"])
+    water_m3 = [s * porosity * lab["container_volume_mL"] * lab_inputs.ML_TO_M3 for s in params["s_init"]]
+    salt_mol = [cs * water for cs, water in zip(params["cs_init"], water_m3)]
 
     print(f"Soil formulation: {getattr(texture_cls, 'FORMULATION', 'clapp_hornberger')}")
     print(f"Compartment depth: {zr:.4f} m")
+    cutoff = lab_inputs.initial_cutoff(lab, times["start"])
+    if cutoff is not None:
+        print(f"Initial s and cs: start-date mean before {cutoff}")
     print(f"Initial s:  {[round(v, 3) for v in params['s_init']]}")
     print(f"Initial cs: {[round(v, 3) for v in params['cs_init']]} mM")
+    print(f"Initial soil salt mass: {[round(v, 6) for v in salt_mol]} mol")
+    if lab.get("plant_salt_from_soil"):
+        print(f"Plant c_stem and c_leaf: {params['c_stem']:.3f} mM")
     for step, p in sorted(pulses.items()):
         print(f"Pulse {p['time']} (step {step}): ds = {p['ds'].round(4).tolist()}, "
               f"salt = {p['dms'].round(4).tolist()} mol/m2")
