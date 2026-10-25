@@ -115,13 +115,19 @@ def dielectric_from_raw(raw: pd.Series) -> pd.Series:
     return inner**2
 
 
-def pore_water_ec(bulk_dsm: pd.Series, raw: pd.Series, temp_c: pd.Series) -> pd.Series:
+def pore_water_ec(
+    bulk_dsm: pd.Series,
+    raw: pd.Series,
+    temp_c: pd.Series,
+    eta_b0: float = ETA_B0,
+) -> pd.Series:
     """Pore-water EC (dS/m) from bulk EC, TEROS raw counts, and soil temperature (C).
 
-    Rows with eta_b <= eta_b0 are left blank; the Hilhorst denominator is not positive there.
+    eta_b0 is the bulk permittivity at zero moisture (Hilhorst offset). Rows with
+    eta_b <= eta_b0 are left blank; the denominator is not positive there.
     """
     eta_p = 80.3 - 0.37 * (temp_c - 20.0)
-    denom = dielectric_from_raw(raw) - ETA_B0
+    denom = dielectric_from_raw(raw) - eta_b0
     return (eta_p * bulk_dsm / denom).where(denom > 0)
 
 
