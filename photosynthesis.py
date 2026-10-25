@@ -192,11 +192,17 @@ class C3_cs_reduc(C3):
 class C3_c_leaf_reduc(C3):
 	"""C3 photosynthesis with leaf storage concentration reduction function"""
 	
-	def __init__(self, species, atm, pi0_leaf=-1.4, eta_leaf=17.5, PSILA0_tlp=True, cs_array=None):
+	def __init__(self, species, atm, pi0_leaf=-1.4, eta_leaf=17.5, PSILA0_tlp=True, cs_array=None,
+				 c_leaf_reduc_slope=0.0355, c_leaf_reduc_threshold=12.0):
 		C3.__init__(self, species, atm, pi0_leaf=pi0_leaf, eta_leaf=eta_leaf, PSILA0_tlp=PSILA0_tlp, cs_array=cs_array)
 		self.reduction_factor = 0.0
 		self.hydro_ref = None  # Reference to hydro object (set externally)
 		self.c_leaf_reduc_a = []
+		# reduction = slope * max(c_leaf - threshold, 0), capped just below 1.
+		# Defaults are the Campos-Villareal fit: 0.0355 per mol/m3 above 12 mol/m3
+		# (4.84 mM above the 7.20 mM mean control leaf Na+ at Pecan.LWC).
+		self.c_leaf_reduc_slope = float(c_leaf_reduc_slope)
+		self.c_leaf_reduc_threshold = float(c_leaf_reduc_threshold)
 	
 	def a_c_leaf_reduc(self):
 		"""Salinity reduction factor for photosynthesis based on leaf storage concentration (-)"""
@@ -207,9 +213,10 @@ class C3_c_leaf_reduc(C3):
 		# Update reduction factor from current leaf storage concentration before computing an()
 		if self.hydro_ref is not None and hasattr(self.hydro_ref, 'c_leaf'):
 			c_leaf_val = self.hydro_ref.c_leaf
-			# Linear fit to Campos-Villareal treatment means (leaf Na+ in mM at Pecan.LWC); threshold is
-			# 4.84 mM above the 7.20 mM mean control leaf Na+. Capped below 1 to avoid complete shutdown.
-			self.reduction_factor = min(0.0355 * max(c_leaf_val - 12.0, 0.0), 0.9999)
+			self.reduction_factor = min(
+				self.c_leaf_reduc_slope * max(c_leaf_val - self.c_leaf_reduc_threshold, 0.0),
+				0.9999,
+			)
 		else:
 			self.reduction_factor = 0.0
 		self.ci = self.ciNew(self.cs, atm.ta, atm.qa)

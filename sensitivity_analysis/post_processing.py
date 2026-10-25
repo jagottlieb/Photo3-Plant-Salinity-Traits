@@ -298,6 +298,64 @@ def plot_psi_l(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
     )
 
 
+def plot_stomatal_conductance(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                              plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: midday stomatal conductance, one line per run; one figure per scenario.
+
+    Each point is the daily maximum of ``variables[0]`` (default ``gsw``), drawn at
+    the middle of that day. ``gsw`` peaks near noon, so the daily maximum is the
+    midday conductance. It is per unit leaf area and includes the cuticular conductance.
+    """
+    variable = (plot_cfg.get("variables") or ["gsw"])[0]
+    scale = float(plot_cfg.get("scale", 1.0))
+    rows = manifest[manifest["scenario"] == scenario]
+    colors = common.get("run_colors", {})
+    linestyles = common.get("run_linestyles", {})
+    linewidth = float(common.get("linewidth", 1.2))
+    legend_cfg = {**common.get("legend", {}), **plot_cfg.get("legend", {})}
+
+    width, height = common.get("figsize", [8, 3.5])
+    fig, ax = plt.subplots(figsize=(width, height))
+    for row in rows.itertuples():
+        df = _window(series[(row.run, scenario)], common.get("window_days"))
+        x, y = _daily_max(df, variable)
+        ax.plot(
+            x, y * scale,
+            color=colors.get(row.run), linestyle=linestyles.get(row.run, "-"), linewidth=linewidth,
+            label=run_label(row.overrides, common.get("display_names", {})),
+        )
+    ax.set_ylabel(plot_cfg.get("ylabel", variable))
+    if plot_cfg.get("ylim") is not None:
+        ax.set_ylim(plot_cfg["ylim"])
+    if common.get("window_days") is not None:
+        ax.set_xlim(common["window_days"])
+    ax.set_xlabel(common.get("xlabel", "Days"))
+    ax.legend(
+        title=legend_cfg.get("title"),
+        loc=legend_cfg.get("loc", "upper left"),
+        bbox_to_anchor=legend_cfg.get("bbox_to_anchor", [1.01, 1.0]),
+        fontsize=legend_cfg.get("fontsize", "small"),
+        frameon=legend_cfg.get("frameon", False),
+    )
+    fig.suptitle(_suptitle(plot_cfg, rows))
+    return _save(fig, out_dir / f"stomatal_conductance.{common.get('format', 'png')}", common)
+
+
+def plot_pi0(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+             plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: stacked panels of osmotic potential at full turgor, one line per run; one figure per scenario.
+
+    Panels come from ``variables`` (typically ``pi0_leaf`` and ``pi0_stem``). Salt uptake
+    shifts these through the van't Hoff term, so they track how uptake is split between
+    leaf and stem storage.
+    """
+    return _plot_timeseries(
+        manifest, series, scenario, plot_cfg, common,
+        out_dir / f"pi0.{common.get('format', 'png')}",
+        panels=_panels_from_config(plot_cfg),
+    )
+
+
 def plot_photosynthesis(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
                         plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
     """Figure type: photosynthesis and its salt reduction factor, one line per run; one figure per scenario.
@@ -398,6 +456,21 @@ def _day_index(x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     day_idx = np.floor(x - dt / 2 + 1e-9).astype(int)
     days, counts = np.unique(day_idx, return_counts=True)
     return day_idx, days[counts == counts.max()]
+
+
+def _daily_max(df: pd.DataFrame, variable: str) -> Tuple[np.ndarray, np.ndarray]:
+    """Midpoint and maximum of ``variable`` on each complete day in ``df``.
+
+    Days come from :func:`_day_index` (incomplete edge days are dropped). The x
+    value is the mean ``days_since_burn_in`` of that day's timesteps, which falls
+    at midday for a full day.
+    """
+    x = df["days_since_burn_in"].to_numpy()
+    y = _values(df, variable, None)
+    day_idx, days = _day_index(x)
+    x_mid = np.array([x[day_idx == d].mean() for d in days])
+    y_max = np.array([y[day_idx == d].max() for d in days])
+    return x_mid, y_max
 
 
 def _shade(ax: plt.Axes, x: np.ndarray, mask: np.ndarray) -> None:
@@ -676,6 +749,8 @@ PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "soil_water_potential": plot_soil_water_potential,
     "storage_fluxes": plot_storage_fluxes,
     "psi_l": plot_psi_l,
+    "stomatal_conductance": plot_stomatal_conductance,
+    "pi0": plot_pi0,
     "flux_partition": plot_flux_partition,
     "photosynthesis": plot_photosynthesis,
     "leaf_salt": plot_leaf_salt,

@@ -301,6 +301,8 @@ def build_model(params: Dict[str, Any], sim_cfg: Dict[str, Any], weather: Dict[s
         atmosphere_obj,
         pi0_leaf=params["pi0_leaf"],
         eta_leaf=params["eta_leaf"],
+        c_leaf_reduc_slope=float(params.get("c_leaf_reduc_slope", 0.0355)),
+        c_leaf_reduc_threshold=float(params.get("c_leaf_reduc_threshold", 12.0)),
     )
     hydro_obj = hydraulics.HalophyteStemLeafStorageMultiComp(
         species=species_obj,

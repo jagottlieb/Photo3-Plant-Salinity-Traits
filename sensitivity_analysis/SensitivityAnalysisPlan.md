@@ -42,6 +42,10 @@ The initial sensitivity analysis for the Photo3-Plant-Salinity-Traits model is o
 - `salt_uptake`: Salt uptake enabled
 - `leaf_uptake_frac`: Partition coefficient C_l, the leaf-to-stem ratio of salt concentration increases (leaf share of uptake = C_l VWTLEAF / (VWT + C_l VWTLEAF))
 
+### Photosynthesis Reduction (2)
+- `c_leaf_reduc_slope`: Slope of the leaf-salt reduction, per mol/m3 above the threshold (baseline 0.0355, the Campos-Villareal fit). Reduction factor = min(slope * max(c_leaf - threshold, 0), 0.9999)
+- `c_leaf_reduc_threshold`: c_leaf where the reduction starts (mol/m3; baseline 12.0)
+
 ---
 
 ## 2. Target Outputs
@@ -70,7 +74,8 @@ Every batch saves **all** model output variables per timestep (see `timeseries/*
 |-------|--------|--------|------|
 | 1 | `sensitivity_analysis/Phase 1 - pi0/` | `pi0_leaf` and `pi0_stem`, covaried low/med/high | 3 per scenario |
 | 2 | `sensitivity_analysis/Phase 2 - root conductance x FE/` | root conductance (`kr` or `B_param`) x `E`, 3 x 3 factorial per group | 18 per scenario |
-| 3+ | to be defined | | |
+| 3 | `sensitivity_analysis/Phase 3 - leaf uptake x photo slope/` | `leaf_uptake_frac` (C_l) x `c_leaf_reduc_slope`, 3 x 3 factorial | 9 per scenario |
+| 4+ | to be defined | | |
 
 ### Phase 1 - pi0
 - Low: `pi0_leaf` = -1.1, `pi0_stem` = -0.9
@@ -104,6 +109,15 @@ Scripts used to choose the S2 drydown and explain the model behaviour. They are 
 - `diagnostics/salt_mass/salt_mass.py <batch> [scenario]`: salt mass budget per run (water uptake, salt arriving at roots, admitted, stem/leaf split, share of soil salt stock, per-plant mg NaCl) and a cumulative salt mass figure per group. For `20261004_1928` S5: 5.2-6.0 mol/m2 of salt reaches the roots over 15 days, and (1 - E) of it is admitted (implied E equals the set E). That is 0.26-1.2 mol/m2, or 7-33 mg NaCl per plant. Only 0.23% goes to the leaf (`leaf_uptake_frac` 0.5 weighted by VWTLEAF / (VWTLEAF + VWT)); if all admitted salt went to leaf storage, c_leaf would reach 320-1460 mol/m3. The soil's salt mass is held fixed, so uptake (2-8% of the soil stock over 15 days) never depletes it and excluded salt never accumulates.
 
 Candidate parameters for later phases: storage volumes (`VWT`, `VWTLEAF`), storage conductances (`GWMAX`, `GWMAXLEAF`), elastic moduli (`eta_stem`, `eta_leaf`), and salinity settings (`cs_init`, `E`, `dynamic_E`).
+
+### Phase 3 - leaf uptake fraction x photosynthesis reduction slope
+- One 3 x 3 factorial. `leaf_uptake_frac` (C_l) = 0.75, 1.0 (baseline), 1.25. `c_leaf_reduc_slope` = 0.026625, 0.0355 (baseline), 0.044375, which is the Campos-Villareal slope plus or minus 25%. The onset threshold stays at 12 mol/m3.
+- C_l is the ratio of concentration increases. With `VWT` = 0.011 and `VWTLEAF` = 5e-5 the leaf's share of salt mass is only about 0.34% / 0.45% / 0.57% at those three C_l values, so most admitted salt still goes to the stem.
+- The slope enters photosynthesis as min(slope * max(c_leaf - 12, 0), 0.9999). Stomatal conductance is `gsw` = 1.6 * gsc(A) + gcut, and transpiration is computed from `gsw`, so both move only once c_leaf passes 12 and only in proportion to A.
+- Scenario: S5 (100 mM in both compartments, soil held wet), the Phase 2 case in which roots actually take salt up. Baseline otherwise matches Phase 2 (`E` = 0.95, `kr` = 1e-8, salt uptake and dynamic E on). Simulation: 7-day burn-in plus 30-day window.
+- Figures: transpiration, midday stomatal conductance (daily maximum of gsw), photosynthesis (A and the reduction factor, onset marked), storage salt (c_leaf with the 12 mol/m3 line, and c_stem), pi0 of leaf and stem, leaf water potential, and the salt-response table (30-day leaf delta pi0 and days to reduction onset). Root uptake, soil water potential and storage fluxes are left off: on a wet constant-soil run they copy transpiration or stay flat.
+- `c_leaf_reduc_slope` and `c_leaf_reduc_threshold` are constructor arguments on `C3_c_leaf_reduc` (defaults 0.0355 and 12.0). Configs that omit them, including Phase 1, Phase 2 and the lab runs, keep the previous hard-coded fit.
+- Batch `20261020_2118` (S5). c_leaf starts at 7 mol/m3 and reaches about 15.8 / 18.5 / 21.0 at C_l = 0.75 / 1.0 / 1.25, so every run crosses 12. Onset is day 17.5 / 13.4 / 10.5 and does not depend on the slope, because the factor is zero until the threshold. By day 30 the reduction factor is 0.10-0.38. Daytime peak transpiration falls from 0.328 um/s before onset to 0.309-0.234 um/s (about 6-29% lower); gsw falls from 0.137 to 0.128-0.095 mol/m2/s and A from 12.3 to 11.2-7.9 umol/m2/s. The widest split is at C_l = 1.25, where c_leaf is furthest above 12, so the slope multiplies a larger excess. Higher slope then slightly slows further salt uptake (less transpiration), so end-of-window c_leaf and leaf delta pi0 are a little smaller on the steep runs. Leaf delta pi0 is about -0.045 / -0.058 / -0.070 MPa. Stem c_stem and pi0_stem barely separate (most salt still goes to the stem; higher C_l makes stem adjustment slightly smaller). Midday psi_l relaxes from about -0.85 MPa toward -0.75 MPa on the strongest run.
 
 ---
 
