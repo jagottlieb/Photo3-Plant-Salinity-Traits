@@ -6,7 +6,7 @@ STEM_HEIGHT = 1.5           # stem height (m); average lab tree, treated as a cy
 STEM_DIAMETER = 0.01        # stem diameter (m); average lab tree
 WOOD_DENSITY = 0.60         # pecan wood density (g/cm3); green-volume specific gravity, USFS (2009)
 CELL_WALL_DENSITY = 1.54    # density of wood cell wall material (g/cm3); Siau (1984), Christoffersen et al. (2016)
-LEAF_AREA = 0.36            # total leaf area (m2); average lab tree (3600 cm2)
+LEAF_AREA = 0.0842          # total leaf area (m2); measured lab tree (842 cm2)
 
 
 def vwt(height: float, diameter: float, wood_density: float, cell_wall_density: float, leaf_area: float) -> float:

@@ -9,8 +9,9 @@
 phase:
   name: "Phase 1 - pi0"
   description: >
-    Covary pi0_leaf and pi0_stem at low/med/high levels with all other
-    parameters held at baseline.
+    Covary pi0_leaf and pi0_stem at low/med/high levels on two both-sides
+    drydowns: S2 starts both compartments at the same moisture, S2_one
+    starts compartment 1 drier. Everything else stays at baseline.
 
 simulation:
   species: Pecan                      # class name in species_traits.py
@@ -35,8 +36,9 @@ baseline:
   vwi_stem: 0.85          # initial storage fraction (-)
   c_stem: 5.0             # initial storage salt concentration (mol/m3)
   c_stem_max: null        # cap for dynamic E; null uses max soil cs
-  VWT: 0.0002             # max stem storage (m3/m2 leaf); 1 cm x 1.5 m cylinder x Vt 0.61 (WD 0.60) / 3600 cm2 leaf
-  GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s)); equation gives ~0.0041
+  LAI: 8.5               # non-split lab saplings (m2 leaf/m2 ground). Split-root lab runs use 2
+  VWT: 0.000854          # max stem storage (m3/m2 leaf); 1.5 m x 1 cm cylinder / 0.0842 m2 leaf (842 cm2)
+  GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s)); equation gives ~0.0174
 
   # Leaf storage
   pi0_leaf: -1.4          # osmotic potential at full turgor (MPa)
@@ -78,6 +80,12 @@ scenarios:
     cs_init: [0.0, 0.0]
     post_burn_cs: [0.0, 0.0]
     post_burn_soil_dynamics: [drydown, drydown]
+  S2_one:
+    label: Drydown, uneven start
+    s_init: [0.32, 0.42]                # both dry after burn-in; compartment 1 starts drier (psi_s ~-0.19 MPa vs ~-0.05)
+    cs_init: [0.0, 0.0]
+    post_burn_cs: [0.0, 0.0]
+    post_burn_soil_dynamics: [drydown, drydown]
   S3:
     label: Drydown & Salt
     salt_uptake: true
@@ -86,7 +94,9 @@ scenarios:
     post_burn_cs: [0.0, 100.0]
     post_burn_soil_dynamics: [drydown, constant]
 
-active_scenarios: [S2]
+# S2 dries both compartments from the same start. S2_one dries both, with compartment 1 starting drier.
+# S1 (wet, fresh) and S3 (compartment 2 held at 100 mM) stay defined and inactive.
+active_scenarios: [S2, S2_one]
 
 # Each run overrides baseline keys; every run is repeated for each active scenario.
 runs:
@@ -146,6 +156,32 @@ plots:
     ylim: null                      # shared by both compartment panels
     title: "Soil water potential"
 
+  storage_soil_potential:          # solid = storage; dashed = soil 1; dotted = soil 2; color = pi0 run
+    enabled: true
+    storage_variables: [psi_w_stem, psi_w_leaf]
+    panel_titles: ["Stem storage", "Leaf storage"]
+    ylabel: "Water potential (MPa)"
+    ylim: null
+    title: "Storage and soil water potential"
+
+  soil_moisture:
+    enabled: true
+    variables: [s]
+    compartments: [1, 2]
+    panel_titles: ["Compartment 1", "Compartment 2"]
+    scale: 1.0
+    ylabel: "Relative soil moisture, $s$ (-)"
+    ylim: null
+    title: "Soil moisture"
+
+  night_hr:
+    enabled: true
+    compartments: [1, 2]
+    panel_titles: ["Compartment 1", "Compartment 2"]
+    ylabel: "Nightly efflux (mm)"
+    ylim: null
+    title: "Nightly hydraulic redistribution"
+
   storage_fluxes:
     enabled: true
     variables: [qw_stem, qw_leaf]   # one panel per variable
@@ -189,7 +225,7 @@ plots:
   daily_storage_table:              # LaTeX table (figures/<scenario>/daily_storage_table.tex) matching daily_storage
     enabled: true
     days: [1, 5]                    # 1-based days since end of burn-in
-    day_labels: {1: "1 (well watered)", 5: "5 (water stressed)"}
+    day_labels: {1: "1 (start of drydown)", 5: "5 (end of window)"}
     column_names: {low: Low, med: Medium, high: High}
     caption: "Daily stem and leaf storage discharge and refill (mm) for the drydown scenarios"
     label: "tab:pi0_daily_storage"

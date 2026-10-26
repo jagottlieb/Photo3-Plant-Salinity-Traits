@@ -278,6 +278,72 @@ def plot_soil_water_potential(manifest: pd.DataFrame, series: SeriesDict, scenar
     )
 
 
+def plot_storage_soil_potential(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                                plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: storage water potential with soil water potential on the same axes; one figure per scenario.
+
+    One panel per storage variable (stem, then leaf). Each run is its color.
+    Storage is a solid line. Soil compartment 1 is dashed and compartment 2 is
+    dotted, in that same color, so the storage-to-soil gradient can be read
+    directly. ``storage_variables`` and ``panel_titles`` set the panels.
+    """
+    storage_vars = plot_cfg.get("storage_variables") or ["psi_w_stem", "psi_w_leaf"]
+    panel_titles = plot_cfg.get("panel_titles") or ["Stem storage", "Leaf storage"]
+    soil_styles = plot_cfg.get("soil_linestyles") or ["--", ":"]
+    rows = manifest[manifest["scenario"] == scenario]
+    display_names = common.get("display_names", {})
+    colors = common.get("run_colors", {})
+    linewidth = float(common.get("linewidth", 1.2))
+    legend_cfg = {**common.get("legend", {}), **plot_cfg.get("legend", {})}
+    sample = _window(series[(rows.iloc[0].run, scenario)], common.get("window_days"))
+    n_comp = len(json.loads(sample["psi_s"].iloc[0]))
+
+    width, height = common.get("figsize", [8, 3.5])
+    fig, axes = plt.subplots(len(storage_vars), 1, figsize=(width, height * len(storage_vars)),
+                             sharex=True, sharey=True, squeeze=False)
+    axes = axes[:, 0]
+
+    for ax, variable, title in zip(axes, storage_vars, panel_titles):
+        for row in rows.itertuples():
+            df = _window(series[(row.run, scenario)], common.get("window_days"))
+            x = df["days_since_burn_in"]
+            label = run_label(row.overrides, display_names)
+            color = colors.get(row.run)
+            ax.plot(x, _values(df, variable, None), color=color, lw=linewidth, label=label)
+            for comp, style in zip(range(1, n_comp + 1), soil_styles):
+                ax.plot(
+                    x, _values(df, "psi_s", comp),
+                    color=color, lw=linewidth, ls=style,
+                    label=f"{label}; soil {comp}",
+                )
+        ax.set_title(title, fontsize="medium")
+        ax.set_ylabel(plot_cfg.get("ylabel", "Water potential (MPa)"))
+        if plot_cfg.get("ylim") is not None:
+            ax.set_ylim(plot_cfg["ylim"])
+    axes[0].legend(
+        title=legend_cfg.get("title"),
+        loc=legend_cfg.get("loc", "upper left"),
+        bbox_to_anchor=legend_cfg.get("bbox_to_anchor", [1.01, 1.0]),
+        fontsize=legend_cfg.get("fontsize", "small"),
+        frameon=legend_cfg.get("frameon", False),
+    )
+    if common.get("window_days") is not None:
+        axes[-1].set_xlim(common["window_days"])
+    axes[-1].set_xlabel(common.get("xlabel", "Days"))
+    fig.suptitle(_suptitle(plot_cfg, rows))
+    return _save(fig, out_dir / f"storage_soil_potential.{common.get('format', 'png')}", common)
+
+
+def plot_soil_moisture(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                       plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: stacked panels of relative soil moisture (s), one panel per soil compartment, one line per run; one figure per scenario."""
+    return _plot_timeseries(
+        manifest, series, scenario, plot_cfg, common,
+        out_dir / f"soil_moisture.{common.get('format', 'png')}",
+        panels=_panels_from_config(plot_cfg),
+    )
+
+
 def plot_storage_fluxes(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
                         plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
     """Figure type: stacked panels of storage-to-xylem fluxes (qw_stem, qw_leaf), one panel per variable, one line per run; one figure per scenario."""
@@ -471,6 +537,78 @@ def _daily_max(df: pd.DataFrame, variable: str) -> Tuple[np.ndarray, np.ndarray]
     x_mid = np.array([x[day_idx == d].mean() for d in days])
     y_max = np.array([y[day_idx == d].max() for d in days])
     return x_mid, y_max
+
+
+def _night_efflux_mm(df: pd.DataFrame, compartment: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Midpoint (days since burn-in) and efflux (mm) for each night in ``df``.
+
+    A night is a contiguous run of timesteps with ``forcing_phi`` <= 0. Efflux is
+    the integral of ``-min(qs, 0)`` for ``compartment`` (1-based). ``qs`` is in
+    um/s, and um/s times seconds divided by 1000 is mm.
+    """
+    x = df["days_since_burn_in"].to_numpy()
+    phi = df["forcing_phi"].to_numpy(dtype=float)
+    qs = _values(df, "qs", compartment)
+    dt_s = float(np.median(np.diff(df["time_days"].to_numpy(dtype=float)))) * 86400.0
+    night = phi <= 0
+    edges = np.flatnonzero(np.diff(np.r_[0, night.astype(int), 0]))
+    x_mid, efflux = [], []
+    for a, b in zip(edges[::2], edges[1::2]):
+        x_mid.append(float(x[a:b].mean()))
+        efflux.append(float((-np.minimum(qs[a:b], 0.0)).sum() * dt_s / 1000.0))
+    return np.asarray(x_mid, dtype=float), np.asarray(efflux, dtype=float)
+
+
+def plot_night_hr(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                  plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: nightly water efflux into each soil compartment, one line per run; one figure per scenario.
+
+    Each point is one night (``forcing_phi`` <= 0). The value is hydraulic
+    redistribution into that compartment: water leaving the roots, integrated
+    to mm. ``compartments`` is 1-based.
+    """
+    panels = _panels_from_config({**plot_cfg, "variables": ["qs"]})
+    rows = manifest[manifest["scenario"] == scenario]
+    display_names = common.get("display_names", {})
+    colors = common.get("run_colors", {})
+    linestyles = common.get("run_linestyles", {})
+    linewidth = float(common.get("linewidth", 1.2))
+    legend_cfg = {**common.get("legend", {}), **plot_cfg.get("legend", {})}
+
+    width, height = common.get("figsize", [8, 3.5])
+    fig, axes = plt.subplots(len(panels), 1, figsize=(width, height * len(panels)), sharex=True, squeeze=False)
+    axes = axes[:, 0]
+
+    for p, (ax, panel) in enumerate(zip(axes, panels)):
+        for row in rows.itertuples():
+            df = _window(series[(row.run, scenario)], common.get("window_days"))
+            x, y = _night_efflux_mm(df, int(panel["compartment"]))
+            ax.plot(
+                x, y,
+                color=colors.get(row.run), linestyle=linestyles.get(row.run, "-"),
+                linewidth=linewidth, marker="o", markersize=3,
+                label=run_label(row.overrides, display_names),
+            )
+        ax.axhline(0, color="0.5", lw=0.6)
+        ax.set_ylabel(panel.get("ylabel", plot_cfg.get("ylabel", "Nightly efflux (mm)")))
+        ylim = _panel_ylim(plot_cfg.get("ylim"), p)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        if panel.get("title"):
+            ax.set_title(panel["title"], fontsize="medium")
+
+    axes[0].legend(
+        title=legend_cfg.get("title"),
+        loc=legend_cfg.get("loc", "upper left"),
+        bbox_to_anchor=legend_cfg.get("bbox_to_anchor", [1.01, 1.0]),
+        fontsize=legend_cfg.get("fontsize", "small"),
+        frameon=legend_cfg.get("frameon", False),
+    )
+    if common.get("window_days") is not None:
+        axes[-1].set_xlim(common["window_days"])
+    axes[-1].set_xlabel(common.get("xlabel", "Days"))
+    fig.suptitle(_suptitle(plot_cfg, rows))
+    return _save(fig, out_dir / f"night_hr.{common.get('format', 'png')}", common)
 
 
 def _shade(ax: plt.Axes, x: np.ndarray, mask: np.ndarray) -> None:
@@ -747,6 +885,9 @@ PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "transpiration": plot_transpiration,
     "root_uptake": plot_root_uptake,
     "soil_water_potential": plot_soil_water_potential,
+    "soil_moisture": plot_soil_moisture,
+    "storage_soil_potential": plot_storage_soil_potential,
+    "night_hr": plot_night_hr,
     "storage_fluxes": plot_storage_fluxes,
     "psi_l": plot_psi_l,
     "stomatal_conductance": plot_stomatal_conductance,

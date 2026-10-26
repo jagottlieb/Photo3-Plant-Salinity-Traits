@@ -48,7 +48,7 @@ params:
   vwi_stem: 0.85          # initial storage fraction (-)
   c_stem: 13.5            # replaced at run time when plant_salt_from_soil is set (mol/m3)
   c_stem_max: null        # cap for dynamic E; null uses max soil cs
-  VWT: 0.011              # max stem storage (m3/m2 leaf); Pecan value
+  VWT: 0.000854          # max stem storage (m3/m2 leaf); 1.5 m x 1 cm cylinder / 0.0842 m2 leaf (842 cm2)
   GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s))
 
   # Leaf storage

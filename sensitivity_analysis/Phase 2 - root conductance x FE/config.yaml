@@ -1,7 +1,8 @@
 # Phase 2 - root conductance x FE
 # Targeted runs covarying soil-root conductance and salt filtration efficiency (E).
-# Root conductance is varied through root radial permeability kr in a 3 x 3 factorial with E
-# (group kr_E). A B_param x E group was dropped after batch 20261007_1747 (B changed uptake < 5%).
+# Root conductance is varied through root radial permeability kr in a 2 x 3 factorial with E
+# (group kr_E): baseline kr and a tenfold reduction, no increase. Filtration efficiency is
+# 0.95 (baseline), 0.97, and 0.99. A B_param x E group was dropped after batch 20261007_1747.
 # Everything not listed under `runs` is held at `baseline`.
 #
 # From the repo root:
@@ -11,9 +12,10 @@
 phase:
   name: "Phase 2 - root conductance x FE"
   description: >
-    Full factorial of root radial permeability kr and filtration
-    efficiency E at low/med/high levels, with salt uptake and dynamic E on,
-    with 100 mM salt in both compartments, soil held wet.
+    Factorial of baseline and reduced root radial permeability kr with
+    filtration efficiency E at 0.95, 0.97, and 0.99. Salt uptake and dynamic E
+    on, 30 mM salt in both compartments, soil held wet. Stem storage is the
+    842 cm2 cylinder value. species_traits.py is unchanged.
 
 simulation:
   species: Pecan                      # class name in species_traits.py
@@ -38,8 +40,9 @@ baseline:
   vwi_stem: 0.85          # initial storage fraction (-)
   c_stem: 13.5            # initial storage salt concentration (mol/m3); Campos-Villareal stem/root average
   c_stem_max: null        # cap for dynamic E; null uses max soil cs
-  VWT: 0.011              # max stem storage (m3/m2 leaf); Pecan value
-  GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s)); equation gives ~0.224
+  LAI: 8.5               # non-split lab saplings (m2 leaf/m2 ground). Split-root lab runs use 2
+  VWT: 0.000854          # max stem storage (m3/m2 leaf); 1.5 m x 1 cm cylinder / 0.0842 m2 leaf (842 cm2)
+  GWMAX_manual: null      # used only when gwmax_mode is manual (um/(MPa s)); equation gives ~0.0174
 
   # Leaf storage
   pi0_leaf: -1.4          # osmotic potential at full turgor (MPa)
@@ -72,26 +75,23 @@ scenarios:
   S5:
     label: Salt both, wet
     s_init: [0.45, 0.45]
-    cs_init: [100.0, 100.0]
-    post_burn_cs: [100.0, 100.0]
+    cs_init: [30.0, 30.0]
+    post_burn_cs: [30.0, 30.0]
     post_burn_soil_dynamics: [constant, constant]
 
-# 100 mM in both compartments, soil moisture held constant after burn-in.
+# 30 mM in both compartments, soil moisture held constant after burn-in.
 # Drydown (S4) was dropped for this phase after batch 20261018_1600.
 active_scenarios: [S5]
 
 # Each run overrides baseline keys; every run is repeated for each active scenario.
 # `group` splits the figures: figures/<scenario>/<group>/.
 runs:
-  - {name: kr_lo__E_lo,  group: kr_E, kr: 1.0e-9, E: 0.85}
-  - {name: kr_lo__E_med, group: kr_E, kr: 1.0e-9, E: 0.90}
-  - {name: kr_lo__E_hi,  group: kr_E, kr: 1.0e-9, E: 0.95}
-  - {name: kr_med__E_lo,  group: kr_E, kr: 1.0e-8, E: 0.85}
-  - {name: kr_med__E_med, group: kr_E, kr: 1.0e-8, E: 0.90}
-  - {name: kr_med__E_hi,  group: kr_E, kr: 1.0e-8, E: 0.95}
-  - {name: kr_hi__E_lo,  group: kr_E, kr: 1.0e-7, E: 0.85}
-  - {name: kr_hi__E_med, group: kr_E, kr: 1.0e-7, E: 0.90}
-  - {name: kr_hi__E_hi,  group: kr_E, kr: 1.0e-7, E: 0.95}
+  - {name: kr_lo__E_95,  group: kr_E, kr: 1.0e-9, E: 0.95}
+  - {name: kr_lo__E_97,  group: kr_E, kr: 1.0e-9, E: 0.97}
+  - {name: kr_lo__E_99,  group: kr_E, kr: 1.0e-9, E: 0.99}
+  - {name: kr_med__E_95, group: kr_E, kr: 1.0e-8, E: 0.95}
+  - {name: kr_med__E_97, group: kr_E, kr: 1.0e-8, E: 0.97}
+  - {name: kr_med__E_99, group: kr_E, kr: 1.0e-8, E: 0.99}
 
 # Read by post_processing.py at plot time, so edits here apply without re-running.
 # x axis is days since end of burn-in. Legend entries are each run's override values,
@@ -105,19 +105,15 @@ plots:
     format: png
     font_size: 10
     linewidth: 1.2
-    run_colors:                     # hue = FE (green 0.85, blue 0.90, purple 0.95); shade = kr (light low to dark high)
-      kr_lo__E_lo: "#a1d99b"
-      kr_lo__E_med: "#9ecae1"
-      kr_lo__E_hi: "#bcbddc"
-      kr_med__E_lo: "#41ab5d"
-      kr_med__E_med: "#4292c6"
-      kr_med__E_hi: "#807dba"
-      kr_hi__E_lo: "#005a32"
-      kr_hi__E_med: "#08519c"
-      kr_hi__E_hi: "#3f007d"
-    # run_linestyles off for now: all lines solid and delta_pi0 bars unhatched. To restore E line styles:
-    # run_linestyles: {kr_lo__E_lo: ":", kr_lo__E_med: "--", kr_lo__E_hi: "-", kr_med__E_lo: ":", kr_med__E_med: "--",
-    #                  kr_med__E_hi: "-", kr_hi__E_lo: ":", kr_hi__E_med: "--", kr_hi__E_hi: "-"}
+    run_colors:                     # hue = FE (green 0.95, blue 0.97, purple 0.99); shade = kr (light reduced, dark baseline)
+      kr_lo__E_95: "#a1d99b"
+      kr_lo__E_97: "#9ecae1"
+      kr_lo__E_99: "#bcbddc"
+      kr_med__E_95: "#006d2c"
+      kr_med__E_97: "#08519c"
+      kr_med__E_99: "#54278f"
+    # run_linestyles off for now: all lines solid and delta_pi0 bars unhatched. To restore FE line styles:
+    # run_linestyles: {kr_lo__E_95: ":", kr_lo__E_97: "--", kr_lo__E_99: "-", kr_med__E_95: ":", kr_med__E_97: "--", kr_med__E_99: "-"}
     xlabel: "Days"
     display_names:                  # parameter name -> legend text (matplotlib mathtext)
       kr: "$k_r$"
@@ -212,7 +208,7 @@ plots:
     ylim: null
     title: "Leaf water potential"
 
-  flux_partition:                   # one column per run (9 per group); likely first to switch off
+  flux_partition:                   # one column per run (6 per group); likely first to switch off
     enabled: true
     title: "Transpiration supply partition"
     ylabels: ["Flux ($\\mu$m s$^{-1}$)", "Share of $E$ per step (%)", "Share of daily $E$ (%)"]
