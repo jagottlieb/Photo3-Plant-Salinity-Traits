@@ -42,13 +42,20 @@ def set_plot_style(font_size: float = 10) -> None:
     })
 
 
-def run_label(overrides_json: str, display_names: Dict[str, str]) -> str:
+def run_label(overrides_json: str, display_names: Dict[str, str],
+              run: Optional[str] = None, run_labels: Optional[Dict[str, str]] = None) -> str:
     """Legend label from a run's overrides, e.g. ``$\\pi_{0,leaf}$ = -1.1; $\\pi_{0,stem}$ = -0.9``.
+
+    ``run_labels`` (``plots.common.run_labels``) replaces that text for named runs.
 
     Args:
         overrides_json: The manifest ``overrides`` cell (JSON dict of parameter: value).
         display_names: Parameter name -> display string (``plots.common.display_names``).
+        run: Manifest run name, used to look up ``run_labels``.
+        run_labels: Run name -> legend text. Overrides the generated label when present.
     """
+    if run_labels and run in run_labels:
+        return str(run_labels[run])
     overrides = json.loads(overrides_json)
     return "; ".join(f"{display_names.get(k, k)} = {v}" for k, v in overrides.items())
 
@@ -116,7 +123,7 @@ def _suptitle(plot_cfg: Dict[str, Any], rows: pd.DataFrame) -> str:
 
     Set ``title_context: false`` on a plot block to keep the title alone.
     """
-    title = plot_cfg.get("title", "")
+    title = plot_cfg.get("title") or ""
     if plot_cfg.get("title_context", True) is False:
         return title
     context = [str(rows["scenario_label"].iloc[0])]
@@ -195,7 +202,7 @@ def _draw_timeseries(
                 df["days_since_burn_in"],
                 _values(df, panel["variable"], panel.get("compartment")) * scale,
                 color=colors.get(row.run), linestyle=linestyles.get(row.run, "-"), linewidth=linewidth,
-                label=run_label(row.overrides, display_names),
+                label=run_label(row.overrides, display_names, row.run, common.get("run_labels")),
             )
         ax.set_ylabel(panel.get("ylabel", plot_cfg.get("ylabel", panel["variable"])))
         ylim = _panel_ylim(plot_cfg.get("ylim"), p)
@@ -307,7 +314,7 @@ def plot_storage_soil_potential(manifest: pd.DataFrame, series: SeriesDict, scen
         for row in rows.itertuples():
             df = _window(series[(row.run, scenario)], common.get("window_days"))
             x = df["days_since_burn_in"]
-            label = run_label(row.overrides, display_names)
+            label = run_label(row.overrides, display_names, row.run, common.get("run_labels"))
             color = colors.get(row.run)
             ax.plot(x, _values(df, variable, None), color=color, lw=linewidth, label=label)
             for comp, style in zip(range(1, n_comp + 1), soil_styles):
@@ -388,7 +395,7 @@ def plot_stomatal_conductance(manifest: pd.DataFrame, series: SeriesDict, scenar
         ax.plot(
             x, y * scale,
             color=colors.get(row.run), linestyle=linestyles.get(row.run, "-"), linewidth=linewidth,
-            label=run_label(row.overrides, common.get("display_names", {})),
+            label=run_label(row.overrides, common.get("display_names", {}), row.run, common.get("run_labels")),
         )
     ax.set_ylabel(plot_cfg.get("ylabel", variable))
     if plot_cfg.get("ylim") is not None:
@@ -494,7 +501,7 @@ def plot_delta_pi0(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
     colors = common.get("run_colors", {})
     styles = common.get("run_linestyles", {})
     window = common.get("window_days")
-    labels = [run_label(r.overrides, common.get("display_names", {})) for r in rows.itertuples()]
+    labels = [run_label(r.overrides, common.get("display_names", {}), r.run, common.get("run_labels")) for r in rows.itertuples()]
 
     width, height = common.get("figsize", [8, 3.5])
     fig, axes = plt.subplots(1, len(variables), figsize=(width, height), squeeze=False)
@@ -587,10 +594,10 @@ def plot_night_hr(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
                 x, y,
                 color=colors.get(row.run), linestyle=linestyles.get(row.run, "-"),
                 linewidth=linewidth, marker="o", markersize=3,
-                label=run_label(row.overrides, display_names),
+                label=run_label(row.overrides, display_names, row.run, common.get("run_labels")),
             )
         ax.axhline(0, color="0.5", lw=0.6)
-        ax.set_ylabel(panel.get("ylabel", plot_cfg.get("ylabel", "Nightly efflux (mm)")))
+        ax.set_ylabel(panel.get("ylabel", plot_cfg.get("ylabel", "Hydraulic Redistribution (mm)")))
         ylim = _panel_ylim(plot_cfg.get("ylim"), p)
         if ylim is not None:
             ax.set_ylim(ylim)
@@ -607,8 +614,49 @@ def plot_night_hr(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
     if common.get("window_days") is not None:
         axes[-1].set_xlim(common["window_days"])
     axes[-1].set_xlabel(common.get("xlabel", "Days"))
-    fig.suptitle(_suptitle(plot_cfg, rows))
+    title = _suptitle(plot_cfg, rows)
+    if title:
+        fig.suptitle(title)
     return _save(fig, out_dir / f"night_hr.{common.get('format', 'png')}", common)
+
+
+def plot_night_hr_total(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
+                        plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: one bar per run, the sum of nightly efflux (mm) into one compartment.
+
+    Nights come from :func:`_night_efflux_mm`. A night centered in the last half day of
+    ``window_days`` is left out, because that stub is the next night clipped by the window.
+    ``compartment`` is 1-based.
+    """
+    compartment = int(plot_cfg.get("compartment", 1))
+    rows = manifest[manifest["scenario"] == scenario]
+    display_names = common.get("display_names", {})
+    colors = common.get("run_colors", {})
+    window = common.get("window_days")
+    cutoff = float(window[1]) - 0.5 if window is not None else np.inf
+
+    totals, labels = [], []
+    for row in rows.itertuples():
+        df = _window(series[(row.run, scenario)], window)
+        x, y = _night_efflux_mm(df, compartment)
+        totals.append(float(y[x < cutoff].sum()) if len(y) else 0.0)
+        labels.append(run_label(row.overrides, display_names, row.run, common.get("run_labels")))
+
+    width, height = common.get("figsize", [8, 3.5])
+    fig, ax = plt.subplots(figsize=(width, height))
+    xpos = np.arange(len(rows))
+    ax.bar(xpos, totals, width=0.7, color=[colors.get(r, "C0") for r in rows["run"]])
+    ax.set_xticks(xpos)
+    ax.set_xticklabels(labels, rotation=15, ha="right")
+    ax.set_ylabel(plot_cfg.get("ylabel", "Hydraulic Redistribution (mm)"))
+    if plot_cfg.get("xlabel"):
+        ax.set_xlabel(plot_cfg["xlabel"])
+    if plot_cfg.get("ylim"):
+        ax.set_ylim(plot_cfg["ylim"])
+    title = _suptitle(plot_cfg, rows)
+    if title:
+        fig.suptitle(title)
+    return _save(fig, out_dir / f"night_hr_total.{common.get('format', 'png')}", common)
 
 
 def _shade(ax: plt.Axes, x: np.ndarray, mask: np.ndarray) -> None:
@@ -666,7 +714,7 @@ def plot_flux_partition(manifest: pd.DataFrame, series: SeriesDict, scenario: st
         ax.axhline(0, color="0.5", lw=0.6)
         if plot_cfg.get("flux_ylim"):
             ax.set_ylim(plot_cfg["flux_ylim"])
-        ax.set_title(run_label(row.overrides, display_names), fontsize="medium", color=run_colors.get(row.run, "k"))
+        ax.set_title(run_label(row.overrides, display_names, row.run, common.get("run_labels")), fontsize="medium", color=run_colors.get(row.run, "k"))
 
         ax = axes[1, j]
         share = {k: 100 * q / ev for k, q in flux.items()}
@@ -731,7 +779,7 @@ def plot_daily_transpiration(manifest: pd.DataFrame, series: SeriesDict, scenari
         e_mm = np.array([ev[day_idx == d].sum() * dt_s / 1000 for d in days])
         ax.bar(days + 1 + (j - (len(rows) - 1) / 2) * bar_w, e_mm, width=bar_w,
                color=common.get("run_colors", {}).get(row.run),
-               label=run_label(row.overrides, common.get("display_names", {})))
+               label=run_label(row.overrides, common.get("display_names", {}), row.run, common.get("run_labels")))
     ax.set_xticks(days + 1)
     ax.set_xlabel(plot_cfg.get("xlabel", "Day"))
     ax.set_ylabel(plot_cfg.get("ylabel", "Daily transpiration (mm)"))
@@ -770,7 +818,7 @@ def plot_daily_storage(manifest: pd.DataFrame, series: SeriesDict, scenario: str
         xpos = days + 1 + (j - (len(rows) - 1) / 2) * bar_w
         color = common.get("run_colors", {}).get(row.run)
         ax.bar(xpos, discharge, width=bar_w, color=color,
-               label=run_label(row.overrides, common.get("display_names", {})))
+               label=run_label(row.overrides, common.get("display_names", {}), row.run, common.get("run_labels")))
         ax.bar(xpos, refill, width=bar_w, color=color, alpha=0.5, hatch="///", edgecolor="white")
     ax.axhline(0, color="k", lw=0.8)
     ax.set_xticks(days + 1)
@@ -793,14 +841,19 @@ def plot_daily_storage(manifest: pd.DataFrame, series: SeriesDict, scenario: str
 def table_daily_storage(manifest: pd.DataFrame, series: SeriesDict, scenario: str,
                         plot_cfg: Dict[str, Any], common: Dict[str, Any], out_dir: Path) -> Path:
     """Table type: daily stem + leaf storage discharge and refill (mm) on selected days, one column
-    per run; written as a LaTeX table for the report.
+    per run; written as a LaTeX tabular for the report.
 
     ``plot_cfg`` keys: ``days`` (1-based days since end of burn-in), ``day_labels`` (day -> row
-    label), ``column_names`` (run -> column header), ``caption``, ``label``.
+    label), ``column_names`` (run -> column header), ``panel`` (heading such as ``(B)``, or a
+    scenario -> heading map). ``caption`` and ``label`` wrap the tabular in a table float when
+    ``panel`` is omitted.
     """
     rows = manifest[manifest["scenario"] == scenario]
-    day_labels = plot_cfg.get("day_labels", {})
+    day_labels = {int(k): v for k, v in plot_cfg.get("day_labels", {}).items()}
     col_names = plot_cfg.get("column_names", {})
+    panel = plot_cfg.get("panel")
+    if isinstance(panel, dict):
+        panel = panel.get(scenario)
     values = {}  # (run, day) -> (discharge, refill)
     for row in rows.itertuples():
         days, discharge, refill = _daily_storage(_window(series[(row.run, scenario)], common.get("window_days")))
@@ -808,12 +861,21 @@ def table_daily_storage(manifest: pd.DataFrame, series: SeriesDict, scenario: st
             i = list(days).index(day - 1)
             values[(row.run, day)] = (discharge[i], refill[i])
 
-    lines = [
-        r"\begin{table}[H]",
-        r"\centering",
-        f"\\caption{{{plot_cfg.get('caption', 'Daily storage discharge and refill (mm)')}}}",
-        f"\\label{{{plot_cfg.get('label', 'tab:daily_storage')}}}",
+    n_cols = 2 + len(rows)
+    lines = []
+    if panel is None:
+        lines += [
+            r"\begin{table}[H]",
+            r"\centering",
+            f"\\caption{{{plot_cfg.get('caption', 'Daily storage discharge and refill (mm)')}}}",
+            f"\\label{{{plot_cfg.get('label', 'tab:daily_storage')}}}",
+        ]
+    lines += [
         r"\begin{tabular}{ll" + "c" * len(rows) + "}",
+    ]
+    if panel is not None:
+        lines.append(rf"\multicolumn{{{n_cols}}}{{l}}{{{panel}}} \\")
+    lines += [
         r"\hline",
         "Day & Storage flux & " + " & ".join(col_names.get(r, r) for r in rows["run"]) + r" \\",
         r"\hline",
@@ -824,7 +886,9 @@ def table_daily_storage(manifest: pd.DataFrame, series: SeriesDict, scenario: st
             lead = day_labels.get(day, str(day)) if k == 0 else ""
             lines.append(f"{lead} & {name} & " + " & ".join(cells) + r" \\")
         lines.append(r"\hline")
-    lines += [r"\end{tabular}", r"\end{table}"]
+    lines.append(r"\end{tabular}")
+    if panel is None:
+        lines.append(r"\end{table}")
 
     out_path = out_dir / "daily_storage_table.tex"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -888,6 +952,7 @@ PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "soil_moisture": plot_soil_moisture,
     "storage_soil_potential": plot_storage_soil_potential,
     "night_hr": plot_night_hr,
+    "night_hr_total": plot_night_hr_total,
     "storage_fluxes": plot_storage_fluxes,
     "psi_l": plot_psi_l,
     "stomatal_conductance": plot_stomatal_conductance,
@@ -945,6 +1010,10 @@ def main(argv: Optional[List[str]] = None) -> List[Path]:
                 if group is not None:
                     out_dir = out_dir / group
                 path = PLOT_FUNCTIONS[key](sub, series, scenario, plot_cfg, common, out_dir)
+                if group is not None:
+                    tagged = path.with_name(f"{path.stem}_{group}{path.suffix}")
+                    path.replace(tagged)
+                    path = tagged
                 print(f"  Saved {path.relative_to(batch_dir)}")
                 saved.append(path)
     return saved

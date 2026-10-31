@@ -43,7 +43,8 @@ from soil import ConstantSoil, DrydownSoil, SaltySoilMultiple
 # Scenario keys that are not model parameters (everything else must exist in baseline).
 SCENARIO_ONLY_KEYS = {"label", "post_burn_cs", "post_burn_soil_dynamics"}
 # Run keys that are metadata, not model parameters. ``group`` splits figures by run group.
-RUN_META_KEYS = {"name", "group"}
+# ``scenarios`` limits a run to those active scenarios; omit it to run on every active scenario.
+RUN_META_KEYS = {"name", "group", "scenarios"}
 
 
 # ---------------------------------------------------------------------------
@@ -494,35 +495,41 @@ def main(argv: Optional[List[str]] = None) -> Path:
     print(f"Batch folder: {batch_dir}")
 
     manifest_rows = []
-    n_total = len(cfg["active_scenarios"]) * len(cfg["runs"])
-    k = 0
+    jobs = []
     for scenario_name in cfg["active_scenarios"]:
         for run in cfg["runs"]:
-            k += 1
-            tag = f"{run['name']}__{scenario_name}"
-            print(f"\n[{k}/{n_total}] {tag}")
-            params, scenario = resolve_params(cfg, run, scenario_name)
-            start = time.perf_counter()
-            model = build_model(params, sim_cfg, weather)
-            result = run_simulation(model, params, scenario, weather, sim_cfg, tag=tag)
-            df = outputs_to_dataframe(result, weather, sim_cfg)
-            csv_name = f"timeseries/{tag}.csv"
-            df.to_csv(batch_dir / csv_name, index=False)
-            runtime_s = time.perf_counter() - start
+            only = run.get("scenarios")
+            if only is not None and scenario_name not in list(only):
+                continue
+            jobs.append((scenario_name, run))
+    n_total = len(jobs)
+    k = 0
+    for scenario_name, run in jobs:
+        k += 1
+        tag = f"{run['name']}__{scenario_name}"
+        print(f"\n[{k}/{n_total}] {tag}")
+        params, scenario = resolve_params(cfg, run, scenario_name)
+        start = time.perf_counter()
+        model = build_model(params, sim_cfg, weather)
+        result = run_simulation(model, params, scenario, weather, sim_cfg, tag=tag)
+        df = outputs_to_dataframe(result, weather, sim_cfg)
+        csv_name = f"timeseries/{tag}.csv"
+        df.to_csv(batch_dir / csv_name, index=False)
+        runtime_s = time.perf_counter() - start
 
-            manifest_rows.append({
-                "run": run["name"],
-                "group": run.get("group"),
-                "overrides": json.dumps({k_: v for k_, v in run.items() if k_ not in RUN_META_KEYS}),
-                "scenario": scenario_name,
-                "scenario_label": scenario.get("label", scenario_name),
-                "n_steps": result["n_steps"],
-                "burn_in_steps": result["burn_in_steps"],
-                "runtime_s": round(runtime_s, 1),
-                "timeseries_file": csv_name,
-            })
-            pd.DataFrame(manifest_rows).to_csv(batch_dir / "manifest.csv", index=False)
-            print(f"  Saved {csv_name} ({runtime_s:.0f} s)")
+        manifest_rows.append({
+            "run": run["name"],
+            "group": run.get("group"),
+            "overrides": json.dumps({k_: v for k_, v in run.items() if k_ not in RUN_META_KEYS}),
+            "scenario": scenario_name,
+            "scenario_label": scenario.get("label", scenario_name),
+            "n_steps": result["n_steps"],
+            "burn_in_steps": result["burn_in_steps"],
+            "runtime_s": round(runtime_s, 1),
+            "timeseries_file": csv_name,
+        })
+        pd.DataFrame(manifest_rows).to_csv(batch_dir / "manifest.csv", index=False)
+        print(f"  Saved {csv_name} ({runtime_s:.0f} s)")
 
     print(f"\nDone: {n_total} runs in {batch_dir}")
     return batch_dir
