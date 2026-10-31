@@ -1,0 +1,1 @@
+This batch used redistribute_no_hr: qs_neg -> 0 and that flux subtracted from positive qs (net Sum qs unchanged). Core defs.py was not permanently modified.

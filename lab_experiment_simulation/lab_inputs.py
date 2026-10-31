@@ -1,12 +1,25 @@
 """
 Lab data inputs for the lab experiment simulation.
 
-Turns the processed lab data into model inputs: compartment depth, initial
-relative soil moisture and salinity, irrigation and salt pulses, and sap flux
-on a ground-area basis for comparison with root water uptake.
+Turns the processed lab data into model inputs: effective compartment depth,
+initial relative soil moisture and salinity, irrigation and salt pulses, and
+sap flux on a ground-area basis for comparison with root water uptake.
 
 Units: water fluxes in um/s (model ``qs``), salt mass in mol/m2 of ground
 (model ``SaltySoilMultiple.MS``), concentrations in mM (= mol/m3).
+
+Effective rooting depth
+-----------------------
+The soil model keeps salt as an area density ``MS`` (mol/m2) and updates
+concentration as ``cs = MS / (s * N * ZR)``. Lab pots have a measured soil
+volume ``V`` and ground area ``A``, so I set an effective depth
+
+    ZR_eff = V / A
+
+per compartment. Then ``cs = MS / (s * N * ZR_eff)`` is the same as
+``cs = M_total / (V * N * s)`` with the pot moles, without changing the
+ground-area bookkeeping used by uptake and plant salt pools. Sensitivity
+runs keep a uniform species rooting depth (0.2 m for Pecan) instead.
 """
 
 from pathlib import Path
@@ -58,23 +71,69 @@ def _day_mean(series: pd.Series, date: pd.Timestamp, label: str, before: pd.Time
     return float(day.mean())
 
 
+def container_volumes_mL(lab: Dict[str, Any]) -> List[float]:
+    """Soil volume (mL) per compartment from ``lab["container_volume_mL"]``.
+
+    Accepts a per-side dict (e.g. ``{left: 2600, right: 3900}``) or a scalar
+    applied to every side.
+    """
+    vol = lab["container_volume_mL"]
+    if isinstance(vol, dict):
+        return [float(vol[side]) for side in lab["sides"]]
+    return [float(vol)] * len(lab["sides"])
+
+
+def effective_zr_m(lab: Dict[str, Any]) -> List[float]:
+    """Effective compartment depths ZR_eff = V / A_ground (m), one per side.
+
+    Matches pot salt mass balance to the model's ``MS`` (mol/m2) form:
+    ``cs = MS / (s * N * ZR_eff)`` equals ``M_total / (V * N * s)``.
+    """
+    area_m2 = lab["ground_area_cm2"] * CM2_TO_M2
+    return [vol_mL * ML_TO_M3 / area_m2 for vol_mL in container_volumes_mL(lab)]
+
+
 def compartment_depth(lab: Dict[str, Any]) -> float:
-    """Soil depth (m) of one compartment: container volume / ground area."""
-    return lab["container_volume_mL"] * ML_TO_M3 / (lab["ground_area_cm2"] * CM2_TO_M2)
+    """Scalar ZR_eff (m) when ``container_volume_mL`` is a single value.
+
+    Prefer ``effective_zr_m`` for lab runs (supports per-side volumes).
+    """
+    depths = effective_zr_m(lab)
+    if len(set(round(z, 12) for z in depths)) != 1:
+        raise TypeError(
+            "container_volume_mL differs by side; use effective_zr_m() for ZR_eff"
+        )
+    return depths[0]
+
+
+def _vwc_depths_for_side(lab: Dict[str, Any], side: str) -> List[str]:
+    """Probe depths used for initial s on one side.
+
+    ``lab["vwc_depths"]`` may be a shared list (e.g. ``[shallow]``), a per-side
+    dict (e.g. ``{left: deep, right: shallow}`` or ``{left: [deep], ...}``), or
+    omitted (default both shallow and deep).
+    """
+    depths = lab.get("vwc_depths", ["shallow", "deep"])
+    if isinstance(depths, dict):
+        side_depths = depths[side]
+        if isinstance(side_depths, str):
+            return [side_depths]
+        return list(side_depths)
+    return list(depths)
 
 
 def initial_s(lab: Dict[str, Any], date: pd.Timestamp, porosity: float) -> List[float]:
     """Relative soil moisture per compartment from the start-date mean VWC.
 
-    Each side's VWC is the mean of the depths in ``lab["vwc_depths"]`` (default
-    shallow and deep), averaged over ``date`` and divided by ``porosity``. With
+    Each side's VWC is the mean of the depths from ``_vwc_depths_for_side``,
+    averaged over ``date`` and divided by ``porosity``. With
     ``initial_before_pulses``, the mean stops before the first pulse that day.
     """
     df = _read_csv(lab, "vwc_file", "datetime")
     before = initial_cutoff(lab, date)
-    depths = lab.get("vwc_depths", ["shallow", "deep"])
     s = []
     for side in lab["sides"]:
+        depths = _vwc_depths_for_side(lab, side)
         cols = [f"tree{lab['tree']}_{side}_{depth}" for depth in depths]
         vwc = _day_mean(df[cols].mean(axis=1), date, f"{side} VWC", before)
         s.append(vwc / porosity)
@@ -116,7 +175,7 @@ def pulse_schedule(lab: Dict[str, Any], start: pd.Timestamp, end: pd.Timestamp, 
     prefix = f"tree{lab['tree']}"
     vol = df[[f"{prefix}_{side}_vol_liters" for side in lab["sides"]]].to_numpy(dtype=float)
     mol = df[[f"{prefix}_{side}_moles" for side in lab["sides"]]].to_numpy(dtype=float)
-    pore_volume = lab["container_volume_mL"] * ML_TO_M3 * porosity
+    pore_volume = np.array(container_volumes_mL(lab), dtype=float) * ML_TO_M3 * porosity
     ground_area = lab["ground_area_cm2"] * CM2_TO_M2
 
     pulses = {}

@@ -109,8 +109,11 @@ def simulate(cfg: Dict[str, Any]) -> pd.DataFrame:
 
     times = model_times(sim_cfg)
     porosity = getattr(soil, sim_cfg["soil_texture"])().N
-    zr = lab_inputs.compartment_depth(lab)
-    sim_cfg["zr_arr"] = [zr] * len(lab["sides"])
+    # Default: ZR_eff = V/A so cs = MS/(s*N*ZR) matches pot moles / (V*N*s).
+    # An explicit simulation.zr_arr still overrides (e.g. diagnostics).
+    if "zr_arr" not in sim_cfg:
+        sim_cfg["zr_arr"] = lab_inputs.effective_zr_m(lab)
+    volumes_mL = lab_inputs.container_volumes_mL(lab)
     params["s_init"] = lab_inputs.initial_s(lab, times["start"], porosity)
     params["cs_init"] = lab_inputs.initial_cs(lab, times["start"])
     if lab.get("plant_salt_from_soil"):
@@ -118,11 +121,12 @@ def simulate(cfg: Dict[str, Any]) -> pd.DataFrame:
         params["c_stem"] = plant_cs
         params["c_leaf"] = plant_cs
     pulses = lab_inputs.pulse_schedule(lab, times["start"], times["end"], porosity, times["step_starts"])
-    water_m3 = [s * porosity * lab["container_volume_mL"] * lab_inputs.ML_TO_M3 for s in params["s_init"]]
+    water_m3 = [s * porosity * vol * lab_inputs.ML_TO_M3 for s, vol in zip(params["s_init"], volumes_mL)]
     salt_mol = [cs * water for cs, water in zip(params["cs_init"], water_m3)]
 
     print(f"Soil formulation: {getattr(texture_cls, 'FORMULATION', 'clapp_hornberger')}")
-    print(f"Compartment depth: {zr:.4f} m")
+    print(f"ZR_eff (zr_arr): {[round(float(z), 4) for z in sim_cfg['zr_arr']]} m  "
+          f"(= V/A; pot volumes {volumes_mL} mL)")
     cutoff = lab_inputs.initial_cutoff(lab, times["start"])
     if cutoff is not None:
         print(f"Initial s and cs: start-date mean before {cutoff}")

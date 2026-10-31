@@ -24,7 +24,7 @@ simulation:
 lab:
   tree: 1
   sides: [left, right]                # compartment order: left is sensor 2, right is sensor 3
-  container_volume_mL: 4318           # soil volume per side; compartment depth = volume / ground area
+  container_volume_mL: {left: 2600, right: 3900}  # 2.6 L left, 3.9 L right; irrigation ds and ZR_eff = V/A
   ground_area_cm2: 210                # soil area per side (Bucket Info tab)
   root_area_cm2: {left: 2.65, right: 1.57}   # measured root cross-section (cm2); sap flux comparison
   vwc_file: data/soil_data/vwc_data/vwc_processed.csv

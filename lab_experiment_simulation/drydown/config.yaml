@@ -23,10 +23,11 @@ simulation:
 lab:
   tree: 1
   sides: [left, right]                # compartment order
-  container_volume_mL: 4318           # soil volume per side; compartment depth = volume / ground area
+  container_volume_mL: {left: 2600, right: 3900}  # 2.6 L left, 3.9 L right; irrigation ds and ZR_eff = V/A
   ground_area_cm2: 210                # soil area per side (Bucket Info tab)
   root_area_cm2: {left: 2.65, right: 1.57}   # measured root cross-section (cm2); sap flux comparison
   vwc_file: data/soil_data/vwc_data/vwc_processed.csv
+  vwc_depths: {left: deep, right: shallow}  # initial s: deep left, shallow right
   conductivity_file: data/soil_data/matric_potential_conductivity/matric_conductivity_processed.csv
   conductivity_cols: {left: soil2_conduct_mM, right: soil3_conduct_mM}
   irrigation_file: data/tree_and_watering_data/split_tree_water_salt_inputs.csv   # volumes in L, salt in mol
