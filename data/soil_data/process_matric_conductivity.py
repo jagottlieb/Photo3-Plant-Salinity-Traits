@@ -9,7 +9,7 @@ Conversions:
     cond_pw_N             -> cond_pw_N_mM      [mM]    (* 10)
 
 Pore-water EC uses the TEROS 11/12 mineral-soil calibration. soilN_vwc is the
-raw count (RAW), not a water fraction. eta_b0 = 4.1.
+raw count (RAW), not a water fraction. eta_b0 = 1.7.
 
     eta_p = 80.3 - 0.37 * (T_soil - 20)
     eta_b = (2.887e-9*RAW^3 - 2.080e-5*RAW^2 + 5.276e-2*RAW - 43.39)^2
@@ -29,7 +29,7 @@ DATA_DIR = Path(__file__).parent / "matric_potential_conductivity"
 
 MATRIC_COLS = ["soil0_matric", "soil1_matric"]
 CONDUCT_COLS = ["soil2_conduct", "soil3_conduct"]
-ETA_B0 = 4.1  # dielectric offset in the Hilhorst pore-water model
+ETA_B0 = 1.7  # dielectric offset in the Hilhorst pore-water model
 
 
 def pore_water_column(conduct_col: str) -> str:

@@ -28,7 +28,7 @@ COLORS = {
 }
 OUT = proc.DATA_DIR / "porewater_eta_b0_sensitivity.png"
 # soil2 at 4.1 reaches hundreds of dS/m where eta_b approaches the offset.
-YLIM = (0, 4.5)
+YLIM = (0, 15)
 
 
 def main() -> None:
@@ -53,6 +53,7 @@ def main() -> None:
             ax.axvline(t, color="grey", ls=":", lw=1)
         ax.set_ylabel("Pore-water EC (dS/m)")
         ax.set_ylim(*YLIM)
+        ax.set_yticks(range(0, 16, 5))
         ax.set_title(f"soil{num}")
         ax.legend(loc="upper right", fontsize="small", frameon=False, ncol=2)
 
