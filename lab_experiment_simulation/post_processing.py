@@ -194,21 +194,32 @@ def _saline_irrigation_days(irrigation: pd.DataFrame, lab: Dict[str, Any], side:
     return set(both.index.normalize())
 
 
-def _annotate_pulse(ax: plt.Axes, t: pd.Timestamp, note: str) -> None:
-    """Vertical dashed pulse marker; white label with gray outline to the right of the line."""
+def _annotate_pulse(ax: plt.Axes, t: pd.Timestamp, note: str, placement: str = "in_pane",
+                    y: float = 0.92) -> None:
+    """Vertical dashed pulse marker with a white / gray-outline label.
+
+    ``placement`` is ``in_pane`` (to the right of the line) or ``above`` (above the axes).
+    For ``in_pane``, ``y`` is the label position in axes fraction (1 = top).
+    """
     ax.axvline(t, color="0.4", ls=":", lw=0.8, zorder=2)
-    ax.annotate(
-        note, xy=(t, 0.92), xycoords=("data", "axes fraction"),
-        xytext=(8, 0), textcoords="offset points",
-        ha="left", va="top", fontsize="x-small",
-        bbox=dict(boxstyle="square,pad=0.25", facecolor="white", edgecolor="0.45", alpha=0.95),
-        zorder=5, clip_on=False,
-    )
+    bbox = dict(boxstyle="square,pad=0.25", facecolor="white", edgecolor="0.45", alpha=0.95)
+    if placement == "above":
+        ax.text(
+            t, 1.08, note, transform=ax.get_xaxis_transform(),
+            ha="center", va="bottom", fontsize="x-small", bbox=bbox,
+            zorder=5, clip_on=False,
+        )
+    else:
+        ax.annotate(
+            note, xy=(t, y), xycoords=("data", "axes fraction"),
+            xytext=(8, 0), textcoords="offset points",
+            ha="left", va="top", fontsize="x-small", bbox=bbox,
+            zorder=5, clip_on=False,
+        )
 
 
-def _pulse_legend_kwargs(plot_cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Extra legend args when ``plots.*.pulse_legend`` is set; otherwise empty."""
-    text = plot_cfg.get("pulse_legend")
+def _pulse_legend_kwargs(text: Optional[str]) -> Dict[str, Any]:
+    """Extra legend args for a pulse-annotation box; empty if ``text`` is falsy."""
     if not text:
         return {}
     return {
@@ -216,6 +227,17 @@ def _pulse_legend_kwargs(plot_cfg: Dict[str, Any]) -> Dict[str, Any]:
         "extra_labels": [""],
         "handler_map": {_PulseLegendHandle: _HandlerPulseLegend()},
     }
+
+
+def _pulse_legend_text(has_volume: bool, has_salt: bool) -> Optional[str]:
+    """Legend label for pulse boxes on a panel, or None if that panel has no pulses."""
+    if has_volume and has_salt:
+        return "volume, salt mass added"
+    if has_salt:
+        return "salt mass added"
+    if has_volume:
+        return "volume added"
+    return None
 
 
 def _draw_irrigation_day(ax: plt.Axes, day: pd.Timestamp, ylim: tuple[float, float],
@@ -245,6 +267,8 @@ def plot_sap_flux_vs_uptake(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dic
     titles = plot_cfg.get("panel_titles") or lab["sides"]
 
     width, height = common.get("figsize", [9, 3.0])
+    placement = str(plot_cfg.get("pulse_placement", "in_pane"))
+    pulse_y = float(plot_cfg.get("pulse_y", 0.92))
     fig, axes = plt.subplots(len(lab["sides"]), 1, figsize=(width, height * len(lab["sides"])),
                              sharex=True, gridspec_kw={"hspace": 0.45})
     for i, (ax, side) in enumerate(zip(axes, lab["sides"])):
@@ -253,17 +277,20 @@ def plot_sap_flux_vs_uptake(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dic
         ax.plot(sap.index, sap[side], color=common.get("data_color"), lw=linewidth, marker=".", ms=3,
                 label=f"Sap flux, {side} root")
         prefix = f"tree{lab['tree']}_{side}"
+        has_volume = has_salt = False
         for t, row in irrigation[irrigation[f"{prefix}_vol_liters"] > 0].iterrows():
             note = f"{row[f'{prefix}_vol_liters']} L"
+            has_volume = True
             if row[f"{prefix}_moles"] > 0:
                 note += f", {row[f'{prefix}_moles']} mol"
-            _annotate_pulse(ax, t, note)
+                has_salt = True
+            _annotate_pulse(ax, t, note, placement=placement, y=pulse_y)
         ax.set_title(titles[i], fontsize="medium")
         ax.set_ylabel(plot_cfg.get("ylabel", "Flux ($\\mu$m s$^{-1}$)"))
         ylim = _panel_ylim(plot_cfg.get("ylim"), i)
         if ylim is not None:
             ax.set_ylim(ylim)
-        _legend(ax, common, **_pulse_legend_kwargs(plot_cfg))
+        _legend(ax, common, **_pulse_legend_kwargs(_pulse_legend_text(has_volume, has_salt)))
 
     return _finish(fig, axes, plot_cfg, common, out_dir, "sap_flux_vs_uptake")
 
@@ -380,6 +407,7 @@ def plot_soil_salt(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, An
     titles = plot_cfg.get("panel_titles") or lab["sides"]
     linewidth = float(common.get("linewidth", 1.2))
     width, height = common.get("figsize", [9, 3.0])
+    pulse_y = float(plot_cfg.get("pulse_y", 0.22))
 
     fig, axes = plt.subplots(len(lab["sides"]), 1, figsize=(width, height * len(lab["sides"])),
                              sharex=True, gridspec_kw={"hspace": 0.45})
@@ -388,15 +416,28 @@ def plot_soil_salt(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, An
                 label="Model soil salt")
         ax.plot(obs.index, obs[lab["conductivity_cols"][side]], color=common.get("data_color"), lw=linewidth,
                 label="Measured pore water")
-        moles = irrigation[f"tree{lab['tree']}_{side}_moles"]
-        for t, added in moles[moles > 0].items():
-            _annotate_pulse(ax, t, f"{added} mol")
+        prefix = f"tree{lab['tree']}_{side}"
+        vol = irrigation[f"{prefix}_vol_liters"]
+        moles = irrigation[f"{prefix}_moles"]
+        has_volume = has_salt = False
+        for t in irrigation.index:
+            v, m = float(vol.loc[t]), float(moles.loc[t])
+            if v <= 0 and m <= 0:
+                continue
+            parts = []
+            if v > 0:
+                parts.append(f"{v} L")
+                has_volume = True
+            if m > 0:
+                parts.append(f"{m} mol")
+                has_salt = True
+            _annotate_pulse(ax, t, ", ".join(parts), y=pulse_y)
         ax.set_title(titles[i], fontsize="medium")
         ax.set_ylabel(plot_cfg.get("ylabel", "Salt concentration (mM)"))
         ylim = _panel_ylim(plot_cfg.get("ylim"), i)
         if ylim is not None:
             ax.set_ylim(ylim)
-        _legend(ax, common, **_pulse_legend_kwargs(plot_cfg))
+        _legend(ax, common, **_pulse_legend_kwargs(_pulse_legend_text(has_volume, has_salt)))
     return _finish(fig, axes, plot_cfg, common, out_dir, "soil_salt")
 
 

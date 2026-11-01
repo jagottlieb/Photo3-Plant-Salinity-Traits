@@ -99,7 +99,7 @@ plots:
     panel_titles: ["Left side (baseline)", "Right side (drydown)"]
     ylabel: "Flux ($\\mu$m s$^{-1}$)"
     ylim: null                      # null, [min, max], or a list of [min, max] per panel
-    pulse_legend: "volume added"    # gray legend box explaining pulse annotations
+    pulse_placement: above          # pulse label above the axes (in_pane puts it beside the line)
 
   daily_uptake_vs_sap_flux:
     enabled: true
