@@ -1,8 +1,9 @@
 # Lab experiment simulation - Tree 1 split root, salt-treatment window
-# Comparison window is 12-18 Aug 2026. Initial soil moisture and pore-water salinity are the
-# start-date means from before the first pulse that day. Irrigation is a moisture pulse;
-# salt additions are moles added to the soil salt mass. Stem and leaf salt start at the
-# mean of the two compartments' initial soil concentrations.
+# Comparison window is 12 Aug through start of 26 Aug 2026 (end_date inclusive through 25 Aug).
+# Initial soil moisture and pore-water salinity are the start-date means from before the first
+# pulse that day. Irrigation is a moisture pulse; salt additions are moles added to the soil
+# salt mass. Stem and leaf salt start at the mean of the two compartments' initial soil
+# concentrations. Plant-admitted salt is removed from soil MS each step (deplete_soil_salt).
 #
 # From the repo root:
 # Run:   python lab_experiment_simulation/run_simulation.py lab_experiment_simulation/salt_treatment/config.yaml
@@ -14,7 +15,7 @@ simulation:
   weather_file: data/weather_data/lab_weather_data/Lab_Weather_Joined_Interp30_throughOct17.xlsx   # 30-min lab weather; the run uses the burn-in start onward
   timestepM: 30                       # model timestep (min)
   start_date: 2026-08-12              # first day compared with data (00:00)
-  end_date: 2026-08-18                # last day compared with data (inclusive)
+  end_date: 2026-08-25                # last day inclusive; run ends at start of 8/26
   burn_in_days: 3                     # before start_date: soil held at initial values, no salt uptake
   soil_texture: Berger                # class name in soil.py; its porosity N converts VWC to s
   soil_formulation: clapp_hornberger  # Berger only: van_genuchten or clapp_hornberger
@@ -74,6 +75,7 @@ params:
 
   # Salt and conductance
   salt_uptake: true
+  deplete_soil_salt: true # subtract plant-admitted salt from soil MS each step
   dynamic_E: true         # E rises from its set value toward 1 as c_stem approaches c_stem_max
   E: 0.95                 # salt filtration efficiency (-)
   leaf_uptake_frac: 1.0   # partition coefficient C_l = delta c_leaf / delta c_stem (-)
@@ -98,29 +100,29 @@ plots:
   sap_flux_vs_uptake:
     enabled: true
     title: null
-    panel_titles: ["Left side", "Right side"]
+    panel_titles: ["Left side (Salt treated)", "Right side (Baseline)"]
     ylabel: "Flux ($\\mu$m s$^{-1}$)"
     ylim: null
-    pulse_legend: "volume, salt mass added"  # gray legend box explaining pulse annotations
+    pulse_placement: in_pane
 
   daily_uptake_vs_sap_flux:
     enabled: true
     title: null
-    panel_titles: ["Left side", "Right side"]
+    panel_titles: ["Left side (Salt treated)", "Right side (Baseline)"]
     ylabel: "Daily total (mm)"
     ylim: [0, 3.5]
 
   relative_water_content:
     enabled: true
     title: null
-    panel_titles: ["Left side", "Right side"]
+    panel_titles: ["Left side (Salt treated)", "Right side (Baseline)"]
     ylabel: "Relative water content $s$ (-)"
     ylim: null
 
   soil_salt:
     enabled: true
     title: null
-    panel_titles: ["Left side", "Right side"]
+    panel_titles: ["Left side (Salt treated)", "Right side (Baseline)"]
     ylabel: "Salt concentration (mM)"
-    ylim: [[0, 20], [0, 10]]         # left (top), right (bottom)
-    pulse_legend: "salt mass added"  # white box / gray outline matching pulse annotations
+    ylim: [[0, 25], [0, 10]]         # left (top), right (bottom)
+    pulse_y: 0.08                    # axes-fraction height for pulse boxes (keep below cs lines)
