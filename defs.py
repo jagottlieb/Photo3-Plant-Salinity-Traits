@@ -71,6 +71,30 @@ class SimulationMultiComp(object):
 		if getattr(self, "clip_negative_qs", False):
 			self.hydro.qs = np.maximum(np.atleast_1d(self.hydro.qs), 0.0)
 
+		# Optional: remove salt admitted to the plant from the soil salt stock.
+		# Uses the same per-compartment uptake as Halophyte.uptake (positive qs only).
+		if (
+			getattr(self, "deplete_soil_salt", False)
+			and getattr(self.hydro, "Salt_Uptake", False)
+			and hasattr(self.soil, "MS")
+			and cs_arr is not None
+		):
+			qs = np.maximum(np.atleast_1d(self.hydro.qs), 0.0)
+			cs = np.atleast_1d(cs_arr)
+			# Resolve E the same way as Halophyte.uptake (including dynamic_E).
+			c_max = self.hydro.c_stem_max if self.hydro.c_stem_max is not None else max(float(np.max(cs)), 1e-6)
+			if getattr(self.hydro, "dynamic_E", False):
+				c_thresh = self.hydro.E * c_max
+				if self.hydro.c_stem < c_thresh:
+					E = self.hydro.E
+				else:
+					E = min(self.hydro.E + (1.0 - self.hydro.E) * (self.hydro.c_stem / c_max), 0.9999)
+			else:
+				E = self.hydro.E
+			# mol/m2 removed this step; match uptake units (um/s * mol/m3 * 1e-6 * dt)
+			dMS = qs * cs * (1.0 - E) * 1e-6 * dt
+			self.soil.MS = np.maximum(np.atleast_1d(self.soil.MS) - dMS, 0.0)
+
 		# Store qs values for each compartment
 		for i in range(self.num_compartments):
 			self.qs_a[i].append(self.hydro.qs[i])
