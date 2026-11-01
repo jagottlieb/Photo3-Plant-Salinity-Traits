@@ -65,7 +65,7 @@ params:
   # Roots
   root_frac: [0.5, 0.5]   # root fraction per compartment (-)
   B_param: 10000          # root length density parameter
-  kr: 1.0e-8              # root radial permeability (m/s)
+  kr: 2.0e-10             # root radial permeability (m/s); 1/50 of 1e-8 from lab calibration
   F_CAP: 0.5              # relative position of the stem storage node along the hydraulic path (-)
 
   # Soil water losses besides root uptake
@@ -101,6 +101,14 @@ plots:
     panel_titles: ["Left side", "Right side"]
     ylabel: "Flux ($\\mu$m s$^{-1}$)"
     ylim: null
+    pulse_legend: "volume, salt mass added"  # gray legend box explaining pulse annotations
+
+  daily_uptake_vs_sap_flux:
+    enabled: true
+    title: null
+    panel_titles: ["Left side", "Right side"]
+    ylabel: "Daily total (mm)"
+    ylim: [0, 3.5]
 
   relative_water_content:
     enabled: true
@@ -114,4 +122,5 @@ plots:
     title: null
     panel_titles: ["Left side", "Right side"]
     ylabel: "Salt concentration (mM)"
-    ylim: [[0, 35], null]           # left panel capped; right panel stays automatic
+    ylim: [[0, 20], [0, 10]]         # left (top), right (bottom)
+    pulse_legend: "salt mass added"  # white box / gray outline matching pulse annotations
