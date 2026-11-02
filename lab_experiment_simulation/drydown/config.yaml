@@ -1,6 +1,7 @@
 # Lab experiment simulation - Tree 1 split root, drydown scenario
-# Model run against the lab measurements for tree 1. Initial soil moisture and salinity come from
-# the start-date probe data; irrigation and salt additions come from the split-tree inputs sheet.
+# Model run against the lab measurements for tree 1. Initial soil moisture is the start-date
+# average of shallow and deep VWC on each side; salinity comes from the start-date probe data.
+# Irrigation and salt additions come from the split-tree inputs sheet.
 # Compartment 1 = left side (baseline), compartment 2 = right side (drydown).
 #
 # From the repo root:
@@ -27,7 +28,7 @@ lab:
   ground_area_cm2: 210                # soil area per side (Bucket Info tab)
   root_area_cm2: {left: 2.65, right: 1.57}   # measured root cross-section (cm2); sap flux comparison
   vwc_file: data/soil_data/vwc_data/vwc_processed.csv
-  vwc_depths: {left: deep, right: shallow}  # initial s: deep left, shallow right
+  vwc_depths: [shallow, deep]         # initial s: average of both probes on each side
   conductivity_file: data/soil_data/matric_potential_conductivity/matric_conductivity_processed.csv
   conductivity_cols: {left: soil2_conduct_mM, right: soil3_conduct_mM}
   irrigation_file: data/tree_and_watering_data/split_tree_water_salt_inputs.csv   # volumes in L, salt in mol
