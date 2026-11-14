@@ -39,14 +39,8 @@ def _read_csv(lab: Dict[str, Any], key: str, time_col: str) -> pd.DataFrame:
     return pd.read_csv(REPO_ROOT / lab[key], parse_dates=[time_col]).set_index(time_col).sort_index()
 
 
-def initial_cutoff(lab: Dict[str, Any], date: pd.Timestamp) -> pd.Timestamp | None:
-    """First water or salt pulse on ``date``, when initials should stop before it.
-
-    With ``lab["initial_before_pulses"]`` set, the start-date mean uses only samples
-    from before this time so a same-day addition is not already inside the initial state.
-    """
-    if not lab.get("initial_before_pulses"):
-        return None
+def first_pulse_on_day(lab: Dict[str, Any], date: pd.Timestamp) -> pd.Timestamp | None:
+    """Timestamp of the first water or salt pulse on the calendar day of ``date``."""
     df = _read_csv(lab, "irrigation_file", "timestamp")
     day = df[df.index.normalize() == pd.Timestamp(date).normalize()]
     prefix = f"tree{lab['tree']}"
@@ -57,16 +51,48 @@ def initial_cutoff(lab: Dict[str, Any], date: pd.Timestamp) -> pd.Timestamp | No
     return pd.Timestamp(active.index[0])
 
 
-def _day_mean(series: pd.Series, date: pd.Timestamp, label: str, before: pd.Timestamp | None = None) -> float:
+def initial_cutoff(lab: Dict[str, Any], date: pd.Timestamp) -> tuple[pd.Timestamp | None, pd.Timestamp | None]:
+    """``(before, after)`` bounds for the start-date mean used as initial soil state.
+
+    ``initial_before_pulses``: mean stops before the first same-day pulse (pulse still
+    applied by the model). ``initial_after_pulses``: mean uses only samples after that
+    pulse; set ``start_date`` at or after the pulse so it is not applied again.
+    """
+    before_flag = bool(lab.get("initial_before_pulses"))
+    after_flag = bool(lab.get("initial_after_pulses"))
+    if before_flag and after_flag:
+        raise ValueError("Set only one of lab.initial_before_pulses and lab.initial_after_pulses")
+    pulse = first_pulse_on_day(lab, date)
+    if before_flag:
+        return pulse, None
+    if after_flag:
+        return None, pulse
+    return None, None
+
+
+def _day_mean(
+    series: pd.Series,
+    date: pd.Timestamp,
+    label: str,
+    before: pd.Timestamp | None = None,
+    after: pd.Timestamp | None = None,
+) -> float:
     """Mean of ``series`` over one calendar day; error if that window is empty.
 
-    ``before`` drops samples at or after that time, used when a pulse falls on the start date.
+    ``before`` drops samples at or after that time; ``after`` drops samples at or
+    before that time (for post-irrigation initials on the start date).
     """
     day = series[series.index.normalize() == pd.Timestamp(date).normalize()].dropna()
     if before is not None:
         day = day[day.index < before]
+    if after is not None:
+        day = day[day.index > after]
     if day.empty:
-        when = f" before {before}" if before is not None else ""
+        when = ""
+        if before is not None:
+            when += f" before {before}"
+        if after is not None:
+            when += f" after {after}"
         raise ValueError(f"No {label} data on {pd.Timestamp(date).date()}{when}")
     return float(day.mean())
 
@@ -126,16 +152,26 @@ def initial_s(lab: Dict[str, Any], date: pd.Timestamp, porosity: float) -> List[
     """Relative soil moisture per compartment from the start-date mean VWC.
 
     Each side's VWC is the mean of the depths from ``_vwc_depths_for_side``,
-    averaged over ``date`` and divided by ``porosity``. With
-    ``initial_before_pulses``, the mean stops before the first pulse that day.
+    averaged over ``date`` and divided by ``porosity``. When multiple depths
+    are requested, ``lab["vwc_require_all_depths"]`` (default true) keeps only
+    hours where every depth is present so the mean is a true midpoint; set it
+    false to average whatever probes are online (skipna), matching the older
+    deep-dominated 12 Aug initials. With ``initial_before_pulses`` /
+    ``initial_after_pulses``, the mean is clipped around the first same-day
+    pulse (see ``initial_cutoff``).
     """
     df = _read_csv(lab, "vwc_file", "datetime")
-    before = initial_cutoff(lab, date)
+    before, after = initial_cutoff(lab, date)
+    require_all = bool(lab.get("vwc_require_all_depths", True))
     s = []
     for side in lab["sides"]:
         depths = _vwc_depths_for_side(lab, side)
         cols = [f"tree{lab['tree']}_{side}_{depth}" for depth in depths]
-        vwc = _day_mean(df[cols].mean(axis=1), date, f"{side} VWC", before)
+        if require_all:
+            mid = df[cols].dropna(how="any").mean(axis=1)
+        else:
+            mid = df[cols].mean(axis=1, skipna=True)
+        vwc = _day_mean(mid, date, f"{side} VWC", before=before, after=after)
         s.append(vwc / porosity)
     return s
 
@@ -143,12 +179,15 @@ def initial_s(lab: Dict[str, Any], date: pd.Timestamp, porosity: float) -> List[
 def initial_cs(lab: Dict[str, Any], date: pd.Timestamp) -> List[float]:
     """Soil salinity (mM) per compartment: start-date mean of each side's conductivity probe.
 
-    With ``initial_before_pulses``, the mean stops before the first pulse that day.
+    Honors ``initial_before_pulses`` / ``initial_after_pulses`` like ``initial_s``.
     """
     df = _read_csv(lab, "conductivity_file", "datetime")
-    before = initial_cutoff(lab, date)
+    before, after = initial_cutoff(lab, date)
     return [
-        _day_mean(df[lab["conductivity_cols"][side]], date, f"{side} conductivity", before)
+        _day_mean(
+            df[lab["conductivity_cols"][side]], date, f"{side} conductivity",
+            before=before, after=after,
+        )
         for side in lab["sides"]
     ]
 
@@ -160,6 +199,8 @@ def pulse_schedule(lab: Dict[str, Any], start: pd.Timestamp, end: pd.Timestamp, 
     Each pulse is applied at the start of the first model step beginning at or
     after the irrigation timestamp. Water is converted to relative moisture as
     ``V_irr / (V_container * porosity)``; salt to mol per m2 of ground.
+    Set ``lab["apply_salt_moles"]`` to false to keep water pulses but zero all
+    salt additions (moisture dynamics unchanged).
 
     Args:
         lab: The config ``lab`` section.
@@ -175,6 +216,8 @@ def pulse_schedule(lab: Dict[str, Any], start: pd.Timestamp, end: pd.Timestamp, 
     prefix = f"tree{lab['tree']}"
     vol = df[[f"{prefix}_{side}_vol_liters" for side in lab["sides"]]].to_numpy(dtype=float)
     mol = df[[f"{prefix}_{side}_moles" for side in lab["sides"]]].to_numpy(dtype=float)
+    if not lab.get("apply_salt_moles", True):
+        mol = np.zeros_like(mol)
     pore_volume = np.array(container_volumes_mL(lab), dtype=float) * ML_TO_M3 * porosity
     ground_area = lab["ground_area_cm2"] * CM2_TO_M2
 

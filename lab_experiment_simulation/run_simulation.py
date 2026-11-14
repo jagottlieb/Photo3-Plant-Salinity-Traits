@@ -128,9 +128,11 @@ def simulate(cfg: Dict[str, Any]) -> pd.DataFrame:
     print(f"Soil formulation: {getattr(texture_cls, 'FORMULATION', 'clapp_hornberger')}")
     print(f"ZR_eff (zr_arr): {[round(float(z), 4) for z in sim_cfg['zr_arr']]} m  "
           f"(= V/A; pot volumes {volumes_mL} mL)")
-    cutoff = lab_inputs.initial_cutoff(lab, times["start"])
-    if cutoff is not None:
-        print(f"Initial s and cs: start-date mean before {cutoff}")
+    before, after = lab_inputs.initial_cutoff(lab, times["start"])
+    if before is not None:
+        print(f"Initial s and cs: start-date mean before {before}")
+    elif after is not None:
+        print(f"Initial s and cs: start-date mean after {after}")
     print(f"Initial s:  {[round(v, 3) for v in params['s_init']]}")
     print(f"Initial cs: {[round(v, 3) for v in params['cs_init']]} mM")
     print(f"Initial soil salt mass: {[round(v, 6) for v in salt_mol]} mol")
