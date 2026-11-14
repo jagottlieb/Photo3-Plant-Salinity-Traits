@@ -1,8 +1,8 @@
 # Lab experiment simulation - Tree 1 split root, salt-treatment window
 # Comparison window is 12 Aug through start of 26 Aug 2026 (end_date inclusive through 25 Aug).
-# Initial soil moisture and pore-water salinity are the start-date means from before the first
-# pulse that day. Irrigation is a moisture pulse; salt additions are moles added to the soil
-# salt mass. Stem and leaf salt start at the mean of the two compartments' initial soil
+# Initial soil moisture is the start-date skipna shallow+deep mean (deep-dominated on the
+# right, matching 20261105_2236: s≈0.334 / 0.172). Pore-water salinity is the start-date
+# probe mean. Stem and leaf salt start at the mean of the two compartments' initial soil
 # concentrations. Plant-admitted salt is removed from soil MS each step (deplete_soil_salt).
 #
 # From the repo root:
@@ -14,9 +14,9 @@ simulation:
   species: Pecan                      # class name in species_traits.py
   weather_file: data/weather_data/lab_weather_data/Lab_Weather_Joined_Interp30_throughOct17.xlsx   # 30-min lab weather; the run uses the burn-in start onward
   timestepM: 30                       # model timestep (min)
-  start_date: 2026-08-12              # first day compared with data (00:00)
+  start_date: 2026-08-12              # first day compared with data (00:00); pre-irrigation day mean
   end_date: 2026-08-25                # last day inclusive; run ends at start of 8/26
-  burn_in_days: 3                     # before start_date: soil held at initial values, no salt uptake
+  burn_in_days: 7                     # before start_date: soil held at initial values, no salt uptake
   soil_texture: Berger                # class name in soil.py; its porosity N converts VWC to s
   soil_formulation: clapp_hornberger  # Berger only: van_genuchten or clapp_hornberger
   psi_wf_mode: bartlett               # storage psi_w formulation (stem and leaf)
@@ -29,6 +29,8 @@ lab:
   ground_area_cm2: 210                # soil area per side (Bucket Info tab)
   root_area_cm2: {left: 2.65, right: 1.57}   # measured root cross-section (cm2); sap flux comparison
   vwc_file: data/soil_data/vwc_data/vwc_processed.csv
+  vwc_depths: [shallow, deep]         # initial s: shallow+deep (see vwc_require_all_depths)
+  vwc_require_all_depths: false       # skipna midpoints; deep-dominated right side (~0.334 / 0.172)
   conductivity_file: data/soil_data/matric_potential_conductivity/matric_conductivity_processed.csv
   conductivity_cols: {left: cond_pw_2_mM, right: cond_pw_3_mM}   # pore-water EC, mM
   irrigation_file: data/tree_and_watering_data/split_tree_water_salt_inputs.csv   # volumes in L, salt in mol
@@ -91,6 +93,8 @@ plots:
     linewidth: 1.2
     model_color: "#08519c"
     data_color: "#6baed6"               # light blue, distinct from the model blue
+    date_label_anchor: 2026-08-12       # x-axis left edge; labels every 2 days from here; daily gridlines
+    date_label_interval_days: 2
     legend:
       loc: upper left
       bbox_to_anchor: [1.01, 1.0]
@@ -126,3 +130,10 @@ plots:
     ylabel: "Salt concentration (mM)"
     ylim: [[0, 25], [0, 10]]         # left (top), right (bottom)
     pulse_y: 0.08                    # axes-fraction height for pulse boxes (keep below cs lines)
+
+  salt_concentrations:
+    enabled: true
+    title: null
+    ylabel: "Salt concentration (mM)"
+    ylim: null
+    pulse_y: 0.92

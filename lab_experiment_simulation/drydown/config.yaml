@@ -15,7 +15,7 @@ simulation:
   timestepM: 30                       # model timestep (min)
   start_date: 2026-08-04              # first day compared with data (00:00)
   end_date: 2026-08-11                # last day compared with data (inclusive); salt treatment starts 8/12
-  burn_in_days: 3                     # before start_date: soil held at initial values, no salt uptake
+  burn_in_days: 7                     # before start_date: soil held at initial values, no salt uptake
   soil_texture: Berger                # class name in soil.py; its porosity N converts VWC to s
   soil_formulation: clapp_hornberger  # Berger only: van_genuchten or clapp_hornberger
   psi_wf_mode: bartlett               # storage psi_w formulation (stem and leaf)
@@ -88,6 +88,8 @@ plots:
     linewidth: 1.2
     model_color: "#08519c"
     data_color: "#6baed6"               # light blue, distinct from the model blue
+    date_label_anchor: 2026-08-04       # x-axis left edge; labels every 2 days from here; daily gridlines
+    date_label_interval_days: 2
     legend:
       loc: upper left
       bbox_to_anchor: [1.01, 1.0]
