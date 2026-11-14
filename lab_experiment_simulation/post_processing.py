@@ -22,6 +22,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from matplotlib.legend_handler import HandlerBase
 from matplotlib.patches import Rectangle
 from matplotlib.text import Text as MplText
@@ -132,11 +133,47 @@ class _HandlerPulseLegend(HandlerBase):
         return [rect, txt]
 
 
+def _apply_date_axis(ax: plt.Axes, common: Dict[str, Any]) -> None:
+    """Daily vertical gridlines and labels every N days; no x tick marks.
+
+    ``plots.common.date_label_interval_days`` (default 2) sets the label spacing.
+    ``plots.common.date_label_anchor`` (e.g. ``2026-08-12``) pins the labeled
+    days and, when set, also sets the left edge of the x-axis.
+
+    Vertical day lines are drawn with ``axvline`` because seaborn's minor x-grid
+    does not reliably render under the Agg + ``bbox_inches='tight'`` save path.
+    """
+    interval = int(common.get("date_label_interval_days", 2))
+    _, x1 = ax.get_xlim()
+    if common.get("date_label_anchor") is not None:
+        anchor = pd.Timestamp(common["date_label_anchor"]).normalize()
+        ax.set_xlim(left=mdates.date2num(anchor), right=x1)
+    else:
+        anchor = pd.Timestamp(mdates.num2date(ax.get_xlim()[0])).tz_localize(None).normalize()
+    x0, x1 = ax.get_xlim()
+    d0 = pd.Timestamp(mdates.num2date(x0)).tz_localize(None).normalize()
+    d1 = pd.Timestamp(mdates.num2date(x1)).tz_localize(None).normalize()
+    offset = (d0 - anchor).days % interval
+    first = d0 if offset == 0 else d0 + pd.Timedelta(days=interval - offset)
+    majors = list(pd.date_range(first, d1, freq=f"{interval}D")) if first <= d1 else []
+    ax.xaxis.set_major_locator(mticker.FixedLocator(mdates.date2num(majors)))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+    ax.xaxis.set_minor_locator(mticker.NullLocator())
+    ax.tick_params(axis="x", which="both", length=0, bottom=False)
+    grid_color = ax.xaxis.get_gridlines()[0].get_color() if ax.xaxis.get_gridlines() else "0.8"
+    ax.grid(False, axis="x")
+    ax.set_axisbelow(True)
+    for day in pd.date_range(d0, d1, freq="D"):
+        ax.axvline(day, color=grid_color, lw=0.8, zorder=1)
+
+
 def _finish(fig: plt.Figure, axes: np.ndarray, plot_cfg: Dict[str, Any], common: Dict[str, Any],
             out_dir: Path, stem: str) -> Path:
     """Date axis, optional figure title, and save."""
-    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
-    axes[-1].set_xlabel("Date (2026)")
+    axes_arr = np.atleast_1d(axes)
+    for ax in axes_arr:
+        _apply_date_axis(ax, common)
+    axes_arr[-1].set_xlabel("Date (2026)")
     title = plot_cfg.get("title")
     if title:
         fig.suptitle(title)
@@ -441,6 +478,56 @@ def plot_soil_salt(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, An
     return _finish(fig, axes, plot_cfg, common, out_dir, "soil_salt")
 
 
+def plot_salt_concentrations(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, Any],
+                             common: Dict[str, Any], out_dir: Path) -> Path:
+    """Figure type: stem/leaf storage and left/right soil salt concentrations (mM).
+
+    Storage concentrations are ``c_stem`` and ``c_leaf``. Soil concentrations are
+    compartment ``cs`` (left dashed black, right solid black). Salt-addition
+    pulses from the irrigation sheet are annotated.
+    """
+    lab = cfg["lab"]
+    irrigation = _load_irrigation(lab, df.index[0], df.index[-1])
+    linewidth = float(common.get("linewidth", 1.2))
+    width, height = common.get("figsize", [9, 3.0])
+    model_color = common.get("model_color", "#08519c")
+    leaf_color = common.get("data_color", "#6baed6")
+    pulse_y = float(plot_cfg.get("pulse_y", 0.92))
+    title = plot_cfg.get("title")
+
+    fig, ax = plt.subplots(figsize=(width, height))
+    ax.plot(df.index, df["c_stem"], color=model_color, lw=linewidth,
+            label=r"$c_{stem}$")
+    ax.plot(df.index, df["c_leaf"], color=leaf_color, lw=linewidth,
+            label=r"$c_{leaf}$")
+    ax.plot(df.index, _compartment(df, "cs", 0), color="k", lw=linewidth, ls="--",
+            label=r"Left soil $c_s$")
+    ax.plot(df.index, _compartment(df, "cs", 1), color="k", lw=linewidth, ls="-",
+            label=r"Right soil $c_s$")
+
+    has_volume = has_salt = False
+    for side in lab["sides"]:
+        prefix = f"tree{lab['tree']}_{side}"
+        for t, row in irrigation.iterrows():
+            v, m = float(row[f"{prefix}_vol_liters"]), float(row[f"{prefix}_moles"])
+            if m <= 0:
+                continue
+            note = f"{v} L, {m} mol" if v > 0 else f"{m} mol"
+            has_salt = True
+            if v > 0:
+                has_volume = True
+            _annotate_pulse(ax, t, note, y=pulse_y)
+
+    ax.set_ylabel(plot_cfg.get("ylabel", "Salt concentration (mM)"))
+    ylim = plot_cfg.get("ylim")
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    if title:
+        fig.suptitle(title)
+    _legend(ax, common, **_pulse_legend_kwargs(_pulse_legend_text(has_volume, has_salt)))
+    return _finish(fig, np.array([ax]), plot_cfg, common, out_dir, "salt_concentrations")
+
+
 def plot_matric_potential(df: pd.DataFrame, cfg: Dict[str, Any], plot_cfg: Dict[str, Any],
                           common: Dict[str, Any], out_dir: Path) -> Path:
     """Figure type: modeled matric potential against the Board 9 matric probes.
@@ -481,6 +568,7 @@ PLOT_FUNCTIONS: Dict[str, Callable[..., Path]] = {
     "daily_uptake_vs_sap_flux": plot_daily_uptake_vs_sap_flux,
     "relative_water_content": plot_relative_water_content,
     "soil_salt": plot_soil_salt,
+    "salt_concentrations": plot_salt_concentrations,
     "matric_potential": plot_matric_potential,
 }
 
