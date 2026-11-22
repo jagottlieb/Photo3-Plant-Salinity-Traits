@@ -339,7 +339,7 @@ def build_model(params: Dict[str, Any], sim_cfg: Dict[str, Any], weather: Dict[s
         F_CAP=params["F_CAP"],
         dynamic_E=bool(params["dynamic_E"]),
         c_stem_max=params["c_stem_max"],
-        kr=float(params.get("kr", 1e-8)),
+        kr=params.get("kr", 1e-8),
     )
     photo_obj.hydro_ref = hydro_obj
 

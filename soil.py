@@ -130,9 +130,23 @@ class SoilMultiple(object):
 		self.SH = self.stype[0].SH
 		self.s_a = [[] for _ in self.s]
 		self.psi_s_a = [[] for _ in self.s]
+		self.soil_evap_a = [[] for _ in self.s]  # applied bare-soil evaporation (um/s), same basis as qs
 		self.cs_a = [[] for _ in self.s] if self.cs is not None else None
 		self.rain_amt = 0
 		self.sm_inp = self.s
+	def _applied_evap_um_s(self, dynamics, s_scalar):
+		"""Bare-soil evaporation rate (um/s) that ``dynamics.snew`` applies at ``s_scalar``.
+
+		Matches ``DrydownSoil.snew`` (respects ``soil_evaporation``) and returns 0 for
+		``ConstantSoil``. Other dynamics always evaporate. ``evap()`` is mm/day;
+		``*1000/86400`` converts to um/s so daily integrals match ``qs``.
+		"""
+		if isinstance(dynamics, ConstantSoil):
+			return 0.0
+		if isinstance(dynamics, DrydownSoil) and not self.soil_evaporation:
+			return 0.0
+		evap_mm_d = float(np.asarray(self.evap(s_scalar)).reshape(-1)[0])
+		return (evap_mm_d * 1000.0) / (24.0 * 60.0 * 60.0)
 	def update(self, dt, zr, qs):
 		qs = np.atleast_1d(qs)
 		zr = np.atleast_1d(zr)
@@ -141,6 +155,7 @@ class SoilMultiple(object):
 		for i in range(len(self.s)):
 			# Temporarily set soil.s to scalar for this compartment
 			self.s = s_array[i]
+			evap_um_s = self._applied_evap_um_s(self.dynamics[i], s_array[i])
 			# Call snew with scalar s value
 			new_s = self.dynamics[i].snew(self, dt, zr[i], qs[i])
 			new_s = float(np.clip(new_s, 1e-9, 1.0))
@@ -151,6 +166,7 @@ class SoilMultiple(object):
 			
 			self.s_a[i].append(self.s[i])
 			self.psi_s_a[i].append(self.psi_s(self.s[i], cs=self.cs[i] if self.cs is not None else None, i=i))
+			self.soil_evap_a[i].append(evap_um_s)
 			if self.cs is not None:
 				# SaltySoil dynamics: update cs
 				if hasattr(self.dynamics[i], 'update_cs'):
@@ -160,6 +176,7 @@ class SoilMultiple(object):
 		out = {}
 		out['s'] = self.s_a
 		out['psi_s'] = self.psi_s_a
+		out['soil_evap'] = self.soil_evap_a
 		if self.cs is not None:
 			out['cs'] = self.cs_a
 		return out
@@ -249,9 +266,11 @@ class SaltySoilMultiple(SoilMultiple):
 
 		# Scalar-safe compartment updates (matches DrydownSoil.snew signature).
 		s_array = self.s.copy()
+		evap_step = []
 		for i in range(len(self.s)):
 			# Temporarily set soil.s to scalar for this compartment
 			self.s = s_array[i]
+			evap_step.append(self._applied_evap_um_s(self.dynamics[i], s_array[i]))
 			# Call snew with scalar s value
 			new_s = self.dynamics[i].snew(self, dt, zr[i], qs[i])
 			new_s = float(np.clip(new_s, 1e-9, 1.0))
@@ -267,6 +286,7 @@ class SaltySoilMultiple(SoilMultiple):
 		for i in range(len(self.s)):
 			self.s_a[i].append(self.s[i])
 			self.psi_s_a[i].append(psi_s_vals[i])
+			self.soil_evap_a[i].append(evap_step[i])
 			self.cs_a[i].append(self.cs[i])
 			self.MS_a[i].append(self.MS[i])
 

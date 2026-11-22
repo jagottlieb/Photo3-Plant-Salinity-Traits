@@ -719,7 +719,8 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		self.E = E
 		self.F_CAP = F_CAP
 		self.dynamic_E = dynamic_E
-		self.kr = kr  # root radial permeability (m/s), used in gsr
+		# Root radial permeability (m/s): scalar or per-compartment sequence, used in gsr.
+		self.kr = kr
 		# c_stem_max uses the same concentration basis as c_stem: mol/m3 on a ground area basis.
 		self.c_stem_max = c_stem_max
 		# Stem storage parameters
@@ -973,11 +974,21 @@ class HalophyteStemLeafStorageMultiComp(Hydro):
 		return gp * lai / (1 - self.F_CAP) * (psi_x - psi_l)
 
 	def gsr(self, soil, s_arr, zr, B, root_frac_arr):
-		"""Soil-root conductance by compartment (um/(s-MPa))."""
+		"""Soil-root conductance by compartment (um/(s-MPa)).
+
+		``self.kr`` may be a scalar (same permeability in every compartment) or a
+		sequence with one value per compartment.
+		"""
 		rr = 0.2 * 10 ** -3
-		kr = self.kr
+		kr_arr = np.atleast_1d(np.asarray(self.kr, dtype=float))
+		if kr_arr.size == 1:
+			kr_arr = np.full(len(s_arr), float(kr_arr[0]))
+		elif kr_arr.size != len(s_arr):
+			raise ValueError(
+				f"kr length ({kr_arr.size}) must match compartment count ({len(s_arr)})"
+			)
 		gsr_list = []
-		for s, root_frac in zip(s_arr, root_frac_arr):
+		for s, root_frac, kr in zip(s_arr, root_frac_arr, kr_arr):
 			B_val = B * root_frac
 			Ar = 2 * float(pi) * rr * B_val
 			l = 0.53 / (float(pi) * B_val) ** 0.5
