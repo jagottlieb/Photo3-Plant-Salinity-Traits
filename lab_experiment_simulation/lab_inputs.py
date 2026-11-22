@@ -154,11 +154,11 @@ def initial_s(lab: Dict[str, Any], date: pd.Timestamp, porosity: float) -> List[
     Each side's VWC is the mean of the depths from ``_vwc_depths_for_side``,
     averaged over ``date`` and divided by ``porosity``. When multiple depths
     are requested, ``lab["vwc_require_all_depths"]`` (default true) keeps only
-    hours where every depth is present so the mean is a true midpoint; set it
-    false to average whatever probes are online (skipna), matching the older
-    deep-dominated 12 Aug initials. With ``initial_before_pulses`` /
-    ``initial_after_pulses``, the mean is clipped around the first same-day
-    pulse (see ``initial_cutoff``).
+    start-date hours where every depth is present (the overlap window), so the
+    mean is a true shallow+deep midpoint; set it false to average whatever
+    probes are online that day (skipna), matching the older deep-dominated
+    12 Aug initials. With ``initial_before_pulses`` / ``initial_after_pulses``,
+    the mean is clipped around the first same-day pulse (see ``initial_cutoff``).
     """
     df = _read_csv(lab, "vwc_file", "datetime")
     before, after = initial_cutoff(lab, date)
