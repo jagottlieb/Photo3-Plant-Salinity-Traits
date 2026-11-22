@@ -28,10 +28,8 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 DIAG_DIR = Path(__file__).resolve().parent
-# Official salt run: 8/12 start, skipna shallow+deep initials (s≈0.334 / 0.172).
-BASELINE_BATCH = (
-    REPO_ROOT / "lab_experiment_simulation" / "salt_treatment" / "results" / "20261113_2238"
-)
+# Official salt run (latest completed batch under salt_treatment/results).
+BASELINE_CONFIG_DIR = REPO_ROOT / "lab_experiment_simulation" / "salt_treatment"
 sys.path.insert(0, str(REPO_ROOT / "sensitivity_analysis"))
 sys.path.append(str(REPO_ROOT / "lab_experiment_simulation"))
 sys.path.append(str(REPO_ROOT))
@@ -354,13 +352,14 @@ def main() -> None:
     set_plot_style()
     cfg = _load_cfg(DIAG_DIR / "config.yaml")
     diag_batch = _resolve_latest_batch(DIAG_DIR)
+    baseline_batch = _resolve_latest_batch(BASELINE_CONFIG_DIR)
     name = cfg["simulation"]["name"]
-    baseline = _load_timeseries(BASELINE_BATCH, name)
+    baseline = _load_timeseries(baseline_batch, name)
     nosalt = _load_timeseries(diag_batch, name)
     out_dir = diag_batch / "figures"
     out_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Baseline: {BASELINE_BATCH.name}")
-    print(f"Diagnostic: {diag_batch.name}")
+    print(f"Baseline: {baseline_batch}")
+    print(f"Diagnostic: {diag_batch}")
     plot_qs_hr_compare(baseline, nosalt, cfg, out_dir, psi_mode="components")
     plot_qs_hr_compare(baseline, nosalt, cfg, out_dir, psi_mode="total")
 

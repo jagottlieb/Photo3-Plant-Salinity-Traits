@@ -92,7 +92,8 @@ plots:
     linewidth: 1.2
     model_color: "#08519c"
     data_color: "#6baed6"               # light blue, distinct from the model blue
-    date_label_anchor: 2026-08-12       # x-axis left edge; labels every 2 days from here; daily gridlines
+    date_label_anchor: 2026-08-12       # label grid; labels every 2 days from here; daily gridlines
+    xlim_pad_before_days: 1.0           # leave room for the 8/12 irrigation band (starts 0.5 d before midnight)
     date_label_interval_days: 2
     legend:
       loc: upper left

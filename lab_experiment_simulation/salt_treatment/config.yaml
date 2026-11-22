@@ -93,7 +93,8 @@ plots:
     linewidth: 1.2
     model_color: "#08519c"
     data_color: "#6baed6"               # light blue, distinct from the model blue
-    date_label_anchor: 2026-08-12       # x-axis left edge; labels every 2 days from here; daily gridlines
+    date_label_anchor: 2026-08-12       # label grid; labels every 2 days from here; daily gridlines
+    xlim_pad_before_days: 1.0           # leave room for the 8/12 irrigation band (starts 0.5 d before midnight)
     date_label_interval_days: 2
     legend:
       loc: upper left
@@ -108,6 +109,7 @@ plots:
     ylabel: "Flux ($\\mu$m s$^{-1}$)"
     ylim: null
     pulse_placement: in_pane
+    show_error_metrics: true        # write sap_flux_vs_uptake_metrics.csv (no on-figure stats)
 
   daily_uptake_vs_sap_flux:
     enabled: true
@@ -115,6 +117,8 @@ plots:
     panel_titles: ["Left side (Salt treated)", "Right side (Baseline)"]
     ylabel: "Daily total (mm)"
     ylim: [0, 3.5]
+    include_soil_evaporation: true  # stack model soil_evap (gray) on root uptake
+    show_error_metrics: true        # write daily totals + model-data difference CSVs
 
   relative_water_content:
     enabled: true
@@ -137,3 +141,10 @@ plots:
     ylabel: "Salt concentration (mM)"
     ylim: null
     pulse_y: 0.92
+
+  # Excel export (not a figure): per-side timestep attribution of cs change to
+  # salt-mass uptake vs soil-moisture change. Formulas are written into the workbook.
+  salt_concentration_attribution:
+    enabled: true
+    panel_titles: ["Left (Salt treated)", "Right (Baseline)"]
+    pulse_threshold: 0.02            # is_pulse if ds or dMS exceeds this

@@ -103,6 +103,7 @@ plots:
     ylabel: "Flux ($\\mu$m s$^{-1}$)"
     ylim: null                      # null, [min, max], or a list of [min, max] per panel
     pulse_placement: above          # pulse label above the axes (in_pane puts it beside the line)
+    show_error_metrics: true        # write sap_flux_vs_uptake_metrics.csv (no on-figure stats)
 
   daily_uptake_vs_sap_flux:
     enabled: true
@@ -110,6 +111,8 @@ plots:
     panel_titles: ["Left side (baseline)", "Right side (drydown)"]
     ylabel: "Daily total (mm)"      # negative root uptake is left out of the model total
     ylim: [-0.5, 2.5]
+    include_soil_evaporation: true  # stack model soil_evap (gray) on root uptake
+    show_error_metrics: true        # write daily totals + model-data difference CSVs
 
   relative_water_content:
     enabled: true
